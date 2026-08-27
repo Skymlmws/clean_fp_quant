@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+
+PROJECT_ROOT="${PROJECT_ROOT:-/home/maoliming/FP-Quant}"
+PYTHON="${PYTHON:-/home/maoliming/project/.venv/bin/python}"
+CHECKPOINT="${CHECKPOINT:-/home/maoliming/project/checkpoints/Wan2.1-T2V-1.3B}"
+WAN_REPO="${WAN_REPO:-/home/maoliming/project/wan2.1}"
+DEVICE_ID="${DEVICE_ID:-2}"
+
+PROMPT="${PROMPT:-A small red panda walking in a bamboo forest.}"
+NEGATIVE_PROMPT="${NEGATIVE_PROMPT:-}"
+WIDTH="${WIDTH:-128}"
+HEIGHT="${HEIGHT:-128}"
+FRAMES="${FRAMES:-5}"
+STEPS="${STEPS:-4}"
+GUIDE_SCALE="${GUIDE_SCALE:-5.0}"
+SHIFT="${SHIFT:-5.0}"
+SEED="${SEED:-0}"
+
+TRANSFORM_GROUP_SIZE="${TRANSFORM_GROUP_SIZE:-32}"
+OUTLIER_THRESHOLD="${OUTLIER_THRESHOLD:-5}"
+QUANT_GROUP_SIZE="${QUANT_GROUP_SIZE:-32}"
+WEIGHT_OBSERVER="${WEIGHT_OBSERVER:-minmax}"
+
+RUN_NAME="${RUN_NAME:-wan1.3b-givens-mxfp4-w4a4-${WIDTH}x${HEIGHT}-${FRAMES}f-${STEPS}steps-seed${SEED}}"
+OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/${RUN_NAME}}"
+
+if [[ ! -x "${PYTHON}" ]]; then
+    echo "Python environment not found or not executable: ${PYTHON}" >&2
+    exit 1
+fi
+if [[ ! -f "${CHECKPOINT}/diffusion_pytorch_model.safetensors" ]]; then
+    echo "Wan checkpoint not found: ${CHECKPOINT}" >&2
+    exit 1
+fi
+if [[ ! -d "${WAN_REPO}/wan" ]]; then
+    echo "Wan repository not found: ${WAN_REPO}" >&2
+    exit 1
+fi
+
+mkdir -p "${OUTPUT_DIR}"
+cd "${PROJECT_ROOT}"
+
+echo "Running Wan2.1 Givens + MXFP4 W4A4 video generation"
+echo "GPU: cuda:${DEVICE_ID}"
+echo "Output: ${OUTPUT_DIR}"
+
+"${PYTHON}" generate_wan_givens_video.py \
+    --checkpoint "${CHECKPOINT}" \
+    --wan-repo "${WAN_REPO}" \
+    --device-id "${DEVICE_ID}" \
+    --prompt "${PROMPT}" \
+    --negative-prompt "${NEGATIVE_PROMPT}" \
+    --width "${WIDTH}" \
+    --height "${HEIGHT}" \
+    --frames "${FRAMES}" \
+    --steps "${STEPS}" \
+    --guide-scale "${GUIDE_SCALE}" \
+    --shift "${SHIFT}" \
+    --seed "${SEED}" \
+    --transform-group-size "${TRANSFORM_GROUP_SIZE}" \
+    --outlier-threshold "${OUTLIER_THRESHOLD}" \
+    --quant-group-size "${QUANT_GROUP_SIZE}" \
+    --weight-observer "${WEIGHT_OBSERVER}" \
+    --output-dir "${OUTPUT_DIR}"

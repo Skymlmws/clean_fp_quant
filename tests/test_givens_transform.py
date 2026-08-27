@@ -18,8 +18,9 @@ def test_givens_calibration_is_orthogonal_and_handles_negative_outliers():
     identity = torch.eye(16)
 
     assert transformed.shape == x.shape
-    torch.testing.assert_close(transform.mat @ transform.mat.T, identity, atol=1e-5, rtol=1e-5)
-    assert not torch.equal(transform.mat[:8, :8], identity[:8, :8])
+    matrix = transform.to_matrix()
+    torch.testing.assert_close(matrix @ matrix.T, identity, atol=1e-5, rtol=1e-5)
+    assert not torch.equal(matrix[:8, :8], identity[:8, :8])
 
 
 def test_givens_preserves_linear_layer_reparametrization():
@@ -45,3 +46,19 @@ def test_givens_supports_non_last_dimension():
     transform = GivensTransform(size=16, group_size=8)
 
     assert transform(x, dim=0).shape == x.shape
+
+
+def test_givens_accumulates_multiple_observations():
+    transform = GivensTransform(size=8, group_size=4, outlier_threshold=20)
+    first = torch.zeros(2, 8)
+    first[0, 1] = 10
+    second = torch.zeros(2, 8)
+    second[1, 2] = -100
+
+    transform.observe(first)
+    transform.observe(second)
+    transform.finalize_calibration()
+
+    assert transform.mat is not None
+    matrix = transform.to_matrix()
+    torch.testing.assert_close(matrix @ matrix.T, torch.eye(8), atol=1e-5, rtol=1e-5)

@@ -287,6 +287,48 @@ lm_eval \
 ```
 
 
+### Wan2.1 DiT experimental path
+
+Wan2.1 uses a separate entry point so the diffusion calibration path does not
+depend on the LLM model loader. The current implementation performs fake RTN
+quantization of the 300 Linear layers inside the 30 DiT blocks.
+
+```shell
+python quantize_wan.py \
+  --checkpoint /path/to/Wan2.1-T2V-1.3B \
+  --wan-repo /path/to/Wan2.1 \
+  --device cuda:0 \
+  --transform-class givens \
+  --transform-group-size 32 \
+  --outlier-threshold 5 \
+  --weight-bits 4 \
+  --activation-bits 16 \
+  --format mxfp \
+  --scale-precision e8m0
+```
+
+The JSON report includes the number of channel blocks that used Givens versus
+the Hadamard fallback. Calibrate the outlier threshold on representative
+prompts, latents, and diffusion timesteps before comparing transform quality.
+
+To calibrate Givens during a real BF16 denoising pass and then generate a
+matching Givens+MXFP4 W4A4 video with the same prompt and seed:
+
+```shell
+python generate_wan_givens_video.py \
+  --checkpoint /path/to/Wan2.1-T2V-1.3B \
+  --wan-repo /path/to/Wan2.1 \
+  --device-id 0 \
+  --prompt "A small red panda walking in a bamboo forest." \
+  --width 128 --height 128 --frames 5 --steps 4 \
+  --outlier-threshold 5 \
+  --output-dir outputs/wan_givens_w4a4_video
+```
+
+The first generation supplies real conditional and unconditional activations
+from every denoising timestep for calibration. The output directory contains
+`bf16.mp4`, `givens_w4a4.mp4`, and `summary.json`.
+
 ### Citation
 ---
 

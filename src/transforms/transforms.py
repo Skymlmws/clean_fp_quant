@@ -120,6 +120,11 @@ class GivensTransform(BaseTransform):
         self.matrix_device = device
         self.matrix_dtype = dtype
         self.register_buffer("mat", None)
+        self._observed_vectors = None
+        self._observed_maxima = None
+        self.givens_blocks = 0
+        self.hadamard_blocks = 0
+        self.observed_abs_max = 0.0
 
     @staticmethod
     def _givens_rotation(
@@ -162,7 +167,8 @@ class GivensTransform(BaseTransform):
         return matrix / math.sqrt(size)
 
     @torch.no_grad()
-    def calibrate(self, x: torch.Tensor) -> None:
+    def observe(self, x: torch.Tensor) -> None:
+        """Accumulate one representative high-magnitude row per channel block."""
         if x.ndim == 0:
             raise ValueError("Givens calibration requires at least one channel dimension")
         x_flat = x.reshape(-1, x.shape[-1]).float()
@@ -174,8 +180,61 @@ class GivensTransform(BaseTransform):
                 f"Input size {full_size} must be divisible by group_size {self.group_size}"
             )
 
-        matrix_device = self.matrix_device or x.device
+        num_groups = full_size // self.group_size
+        if self._observed_vectors is None:
+            self._observed_vectors = torch.zeros(
+                num_groups, self.group_size, device="cpu", dtype=torch.float32
+            )
+            self._observed_maxima = torch.full((num_groups,), -torch.inf)
+
+        for group_idx, start in enumerate(range(0, full_size, self.group_size)):
+            group = x_flat[:, start:start + self.group_size]
+            flat_index = group.abs().argmax()
+            maximum = group.abs().flatten()[flat_index].cpu()
+            if maximum > self._observed_maxima[group_idx]:
+                row = torch.div(flat_index, self.group_size, rounding_mode="floor").item()
+                self._observed_vectors[group_idx].copy_(group[row].cpu())
+                self._observed_maxima[group_idx] = maximum
+
+    @torch.no_grad()
+    def finalize_calibration(self) -> None:
+        """Build the transform after one or more calls to :meth:`observe`."""
+        if self._observed_vectors is None:
+            raise RuntimeError("No activation samples were observed for Givens calibration")
+        num_groups = self._observed_vectors.shape[0]
+        full_size = num_groups * self.group_size
+        representatives = torch.zeros(num_groups, full_size, dtype=torch.float32)
+        for group_idx in range(num_groups):
+            start = group_idx * self.group_size
+            representatives[group_idx, start:start + self.group_size] = self._observed_vectors[group_idx]
+        self._build_matrix(representatives)
+        self._observed_vectors = None
+        self._observed_maxima = None
+
+    @torch.no_grad()
+    def calibrate(self, x: torch.Tensor) -> None:
+        """Immediately calibrate from a single activation tensor."""
+        x_flat = x.reshape(-1, x.shape[-1]).float()
+        self._validate_size(x_flat.shape[-1])
+        self._build_matrix(x_flat)
+
+    def _validate_size(self, full_size: int) -> None:
+        if self.size is not None and full_size != self.size:
+            raise ValueError(f"Expected {self.size} channels, got {full_size}")
+        if full_size % self.group_size:
+            raise ValueError(
+                f"Input size {full_size} must be divisible by group_size {self.group_size}"
+            )
+
+    def _build_matrix(self, x_flat: torch.Tensor) -> None:
+        full_size = x_flat.shape[-1]
+        self._validate_size(full_size)
+
+        matrix_device = self.matrix_device or x_flat.device
         block_mats = []
+        self.givens_blocks = 0
+        self.hadamard_blocks = 0
+        self.observed_abs_max = x_flat.abs().max().item()
         for start in range(0, full_size, self.group_size):
             group = x_flat[:, start:start + self.group_size]
             block = self._hadamard_matrix(self.group_size, matrix_device)
@@ -185,6 +244,7 @@ class GivensTransform(BaseTransform):
             vector = group[row].to(matrix_device).clone()
 
             if vector[current_col].abs() > self.outlier_threshold:
+                self.givens_blocks += 1
                 block = torch.eye(self.group_size, device=matrix_device, dtype=torch.float32)
                 group_max = torch.exp2(torch.floor(torch.log2(vector[current_col].abs())) - 1)
 
@@ -218,11 +278,19 @@ class GivensTransform(BaseTransform):
                     vector = vector @ rotation
                     block = block @ rotation
                     current_col = other_col
+            else:
+                self.hadamard_blocks += 1
 
             block_mats.append(block)
 
-        dtype = self.matrix_dtype or x.dtype
-        self.mat = torch.block_diag(*block_mats).to(device=matrix_device, dtype=dtype)
+        dtype = self.matrix_dtype or x_flat.dtype
+        self.mat = torch.stack(block_mats).to(device=matrix_device, dtype=dtype)
+
+    def to_matrix(self) -> torch.Tensor:
+        """Materialize the full block-diagonal matrix (intended for tests/export)."""
+        if self.mat is None:
+            raise RuntimeError("Givens transform has not been calibrated")
+        return torch.block_diag(*self.mat.unbind(0))
 
     def forward(self, x: torch.Tensor, inv_t: bool = False, dim: int = -1):
         if self.mat is None:
@@ -230,9 +298,15 @@ class GivensTransform(BaseTransform):
                 return x
             self.calibrate(x.movedim(dim, -1))
 
-        matrix = self.mat.to(device=x.device, dtype=x.dtype)
+        matrices = self.mat.to(device=x.device, dtype=x.dtype)
         dim = dim if dim >= 0 else x.ndim + dim
-        transformed = x.movedim(dim, -1) @ matrix
+        moved = x.movedim(dim, -1)
+        if moved.shape[-1] != matrices.shape[0] * self.group_size:
+            raise ValueError(
+                f"Expected {matrices.shape[0] * self.group_size} channels, got {moved.shape[-1]}"
+            )
+        grouped = moved.unflatten(-1, (matrices.shape[0], self.group_size))
+        transformed = torch.einsum("...gi,gij->...gj", grouped, matrices).flatten(-2)
         return transformed.movedim(-1, dim)
 
     def remove_parametrizations(self) -> None:
