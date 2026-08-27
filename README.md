@@ -208,6 +208,7 @@ Above:
 * `--transform_class` - Transform class. We provide the following options:
     * `identity` - Identity transform
     * `hadamard` - Hadamard transform
+    * `givens` - Data-aware block-wise Givens transform for massive outliers
     * `dct` - Discrete cosine transform
     * `dst` - Discrete sine transform
     * `fast_food` - Fast food transform

@@ -87,6 +87,158 @@ class HadamardTransform(BaseTransform):
         pass
 
 
+class GivensTransform(BaseTransform):
+    """Data-aware block-diagonal Givens transform.
+
+    The matrix is calibrated on the first activation tensor passed to ``forward``.
+    Calls with ``inv_t=True`` do not trigger calibration, since those calls normally
+    operate on weights.  Blocks without a massive outlier use a normalized Hadamard
+    matrix, matching the baseline transform used by FP-Quant.
+    """
+
+    def __init__(
+        self,
+        size: Optional[int] = None,
+        group_size: int = 32,
+        n_iter: Optional[int] = None,
+        outlier_threshold: float = 50.0,
+        device: torch.device = None,
+        dtype: torch.dtype = None,
+    ):
+        super().__init__()
+        if group_size <= 1 or group_size & (group_size - 1):
+            raise ValueError("Givens group_size must be a power of two greater than one")
+        if size is not None and size % group_size:
+            raise ValueError(f"Transform size {size} must be divisible by group_size {group_size}")
+        if n_iter is not None and n_iter < 0:
+            raise ValueError("n_iter must be non-negative")
+
+        self.size = size
+        self.group_size = group_size
+        self.n_iter = group_size - 1 if n_iter is None else n_iter
+        self.outlier_threshold = outlier_threshold
+        self.matrix_device = device
+        self.matrix_dtype = dtype
+        self.register_buffer("mat", None)
+
+    @staticmethod
+    def _givens_rotation(
+        n: int,
+        i: int,
+        j: int,
+        theta: torch.Tensor,
+        device: torch.device,
+    ) -> torch.Tensor:
+        matrix = torch.eye(n, device=device, dtype=torch.float32)
+        c, s = torch.cos(theta), torch.sin(theta)
+        matrix[i, i] = c
+        matrix[j, j] = c
+        matrix[i, j] = -s
+        matrix[j, i] = s
+        return matrix
+
+    @staticmethod
+    def _closest_lower_level(standard: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
+        levels = standard * standard.new_tensor([2 / 3, 1 / 2, 1 / 6])
+        valid = levels <= value.abs()
+        return levels[valid].max() if valid.any() else value.abs()
+
+    @staticmethod
+    def _hadamard_matrix(size: int, device: torch.device) -> torch.Tensor:
+        if torch.device(device).type == "cuda":
+            return hadamard_transform(
+                torch.eye(size, device=device, dtype=torch.float32),
+                scale=1 / math.sqrt(size),
+            )
+
+        # fast-hadamard-transform is CUDA-only; keep calibration and tests usable
+        # on CPU without changing the matrix convention used by the extension.
+        matrix = torch.ones(1, 1, device=device, dtype=torch.float32)
+        while matrix.shape[0] < size:
+            matrix = torch.cat(
+                (torch.cat((matrix, matrix), dim=1), torch.cat((matrix, -matrix), dim=1)),
+                dim=0,
+            )
+        return matrix / math.sqrt(size)
+
+    @torch.no_grad()
+    def calibrate(self, x: torch.Tensor) -> None:
+        if x.ndim == 0:
+            raise ValueError("Givens calibration requires at least one channel dimension")
+        x_flat = x.reshape(-1, x.shape[-1]).float()
+        full_size = x_flat.shape[-1]
+        if self.size is not None and full_size != self.size:
+            raise ValueError(f"Expected {self.size} channels, got {full_size}")
+        if full_size % self.group_size:
+            raise ValueError(
+                f"Input size {full_size} must be divisible by group_size {self.group_size}"
+            )
+
+        matrix_device = self.matrix_device or x.device
+        block_mats = []
+        for start in range(0, full_size, self.group_size):
+            group = x_flat[:, start:start + self.group_size]
+            block = self._hadamard_matrix(self.group_size, matrix_device)
+            flat_index = group.abs().argmax()
+            row = torch.div(flat_index, self.group_size, rounding_mode="floor").item()
+            current_col = (flat_index % self.group_size).item()
+            vector = group[row].to(matrix_device).clone()
+
+            if vector[current_col].abs() > self.outlier_threshold:
+                block = torch.eye(self.group_size, device=matrix_device, dtype=torch.float32)
+                group_max = torch.exp2(torch.floor(torch.log2(vector[current_col].abs())) - 1)
+
+                for _ in range(self.n_iter):
+                    candidates = vector.abs().clone()
+                    candidates[current_col] = torch.inf
+                    other_col = candidates.argmin().item()
+                    a, b = vector[current_col], vector[other_col]
+                    if a.abs() < torch.finfo(torch.float32).eps:
+                        break
+
+                    target_magnitude = (
+                        group_max if a.abs() > group_max
+                        else self._closest_lower_level(group_max, a)
+                    )
+                    a_target = a.sign() * target_magnitude
+                    energy = a.square() + b.square()
+                    if a_target.square() > energy:
+                        break
+                    b_magnitude = torch.sqrt(torch.clamp_min(energy - a_target.square(), 0))
+                    b_target = b.sign() * b_magnitude if b != 0 else b_magnitude
+
+                    # For row vectors and the matrix convention below, atan2 retains
+                    # the rotation direction that acos would lose.
+                    dot = a * a_target + b * b_target
+                    cross = b * a_target - a * b_target
+                    theta = torch.atan2(cross, dot)
+                    rotation = self._givens_rotation(
+                        self.group_size, current_col, other_col, theta, matrix_device
+                    )
+                    vector = vector @ rotation
+                    block = block @ rotation
+                    current_col = other_col
+
+            block_mats.append(block)
+
+        dtype = self.matrix_dtype or x.dtype
+        self.mat = torch.block_diag(*block_mats).to(device=matrix_device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor, inv_t: bool = False, dim: int = -1):
+        if self.mat is None:
+            if inv_t:
+                return x
+            self.calibrate(x.movedim(dim, -1))
+
+        matrix = self.mat.to(device=x.device, dtype=x.dtype)
+        dim = dim if dim >= 0 else x.ndim + dim
+        transformed = x.movedim(dim, -1) @ matrix
+        return transformed.movedim(-1, dim)
+
+    def remove_parametrizations(self) -> None:
+        pass
+
+
 class KroneckerFactorizedTransform(BaseTransform):
 
     def __init__(
@@ -296,6 +448,7 @@ TRANSFORMS = {
     "identity": IdentityTransform,
     "full": FullTransform,
     "hadamard": HadamardTransform,
+    "givens": GivensTransform,
     "kronecker": KroneckerFactorizedTransform,
     "identity_low_rank": IdentityLowRankTransform,
     "dct": DCTTransform,
