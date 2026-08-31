@@ -81,7 +81,17 @@ class HadamardTransform(BaseTransform):
     def forward(self, x: torch.Tensor, inv_t: bool = False, dim: int = -1):
         # Hadamard transform is it own inverse
         x_shape = x.shape
-        return hadamard_transform(x.view(-1, self.group_size), scale=self.scale).view(x_shape)
+        grouped = x.view(-1, self.group_size)
+        if x.device.type == "cuda":
+            return hadamard_transform(grouped, scale=self.scale).view(x_shape)
+
+        matrix = torch.ones(1, 1, device=x.device, dtype=x.dtype)
+        while matrix.shape[0] < self.group_size:
+            matrix = torch.cat(
+                (torch.cat((matrix, matrix), dim=1), torch.cat((matrix, -matrix), dim=1)),
+                dim=0,
+            )
+        return (grouped @ matrix.T * self.scale).view(x_shape)
     
     def remove_parametrizations(self) -> None:
         pass

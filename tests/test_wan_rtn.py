@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import pytest
 
 from src.quantization.wan_rtn import wan_rtn_quantization
 from src.utils.wan_utils import WanRTNLinear
@@ -68,3 +69,24 @@ def test_wan_rtn_replaces_ten_linears_and_preserves_transform_equivalence():
     assert report.replaced_count == 10
     assert sum(isinstance(module, WanRTNLinear) for module in model.modules()) == 10
     torch.testing.assert_close(candidate, reference, atol=2e-5, rtol=2e-5)
+
+
+@pytest.mark.parametrize("transform_class", ["identity", "hadamard"])
+def test_wan_rtn_non_calibrated_transforms(transform_class):
+    model = ToyWanModel().eval()
+    x = torch.randn(2, 4, 8)
+    context = torch.randn(2, 4, 8)
+    reference = model(x, context)
+
+    report = wan_rtn_quantization(
+        model,
+        [],
+        torch.device("cpu"),
+        transform_class=transform_class,
+        transform_group_size=4,
+        weight_bits=16,
+        activation_bits=16,
+    )
+
+    assert report.replaced_count == 10
+    torch.testing.assert_close(model(x, context), reference, atol=2e-5, rtol=2e-5)

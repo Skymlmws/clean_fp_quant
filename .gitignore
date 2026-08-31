@@ -182,3 +182,9 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Local Wan video experiment artifacts
+outputs/
+vbench_cache/
+vbench_inputs/
+vbench_results/

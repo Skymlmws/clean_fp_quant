@@ -1,4 +1,4 @@
-"""Generate matching BF16 and Givens+MXFP4 W4A4 Wan2.1 videos."""
+"""Generate matched BF16 and transformed fake-quantized Wan2.1 videos."""
 
 from __future__ import annotations
 
@@ -34,18 +34,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--width", type=int, default=128)
     parser.add_argument("--height", type=int, default=128)
     parser.add_argument("--frames", type=int, default=5)
+    parser.add_argument("--fps", type=int, default=16)
     parser.add_argument("--steps", type=int, default=4)
     parser.add_argument("--guide-scale", type=float, default=5.0)
     parser.add_argument("--shift", type=float, default=5.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device-id", type=int, default=0)
+    parser.add_argument(
+        "--transform-class", choices=("identity", "hadamard", "givens"), default="givens"
+    )
     parser.add_argument("--transform-group-size", type=int, default=32)
     parser.add_argument("--outlier-threshold", type=float, default=5.0)
+    parser.add_argument("--weight-bits", type=int, choices=(4, 16), default=4)
+    parser.add_argument("--activation-bits", type=int, choices=(4, 16), default=4)
     parser.add_argument("--quant-group-size", type=int, default=32)
     parser.add_argument("--weight-observer", choices=("minmax", "mse"), default="minmax")
     parser.add_argument(
         "--output-dir", type=Path, default=Path("outputs/wan_givens_w4a4_video")
     )
+    parser.add_argument(
+        "--reference-tensor",
+        type=Path,
+        default=None,
+        help="Reusable decoded BF16 tensor. It is created when absent.",
+    )
+    parser.add_argument("--reference-only", action="store_true")
     return parser.parse_args()
 
 
@@ -114,66 +127,102 @@ def main() -> None:
         t5_cpu=True,
     )
 
+    transform_kwargs = (
+        {"outlier_threshold": args.outlier_threshold}
+        if args.transform_class == "givens"
+        else {}
+    )
     block_transforms = build_wan_block_transforms(
         pipe.model,
-        "givens",
+        args.transform_class,
         args.transform_group_size,
         device,
-        outlier_threshold=args.outlier_threshold,
+        **transform_kwargs,
     )
-    handles = observe_wan_transforms(pipe.model, block_transforms)
-    try:
-        # This reference generation is also calibration: hooks observe every
-        # conditional/unconditional DiT call at every denoising timestep.
+
+    generated_reference = None
+    reference_seconds = 0.0
+    if args.transform_class == "givens":
+        handles = observe_wan_transforms(pipe.model, block_transforms)
+        try:
+            # The BF16 pass observes every conditional/unconditional DiT call
+            # at every denoising timestep without changing the model output.
+            generated_reference, reference_seconds = generate(pipe, args)
+        finally:
+            for handle in handles:
+                handle.remove()
+        finalize_wan_transforms(block_transforms)
+
+    if args.reference_tensor is not None and args.reference_tensor.is_file():
+        reference = torch.load(args.reference_tensor, map_location="cpu", weights_only=True)
+    elif generated_reference is not None:
+        reference = generated_reference
+    else:
         reference, reference_seconds = generate(pipe, args)
-    finally:
-        for handle in handles:
-            handle.remove()
-    finalize_wan_transforms(block_transforms)
+
+    if args.reference_tensor is not None and not args.reference_tensor.is_file():
+        args.reference_tensor.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(reference, args.reference_tensor)
+
+    reference_path = args.output_dir / "bf16.mp4"
+    cache_video(reference[None], save_file=str(reference_path), fps=args.fps)
+    if args.reference_only:
+        print(f"reference_tensor: {args.reference_tensor}")
+        print(f"reference_video: {reference_path}")
+        return
 
     quantizer_common = {
-        "bits": 4,
         "symmetric": True,
         "format": "mxfp",
         "granularity": "group",
         "group_size": args.quant_group_size,
         "scale_precision": "e8m0",
     }
+    weight_quantizer_kwargs = (
+        {**quantizer_common, "bits": 4, "observer": args.weight_observer}
+        if args.weight_bits == 4
+        else None
+    )
+    activation_quantizer_kwargs = (
+        {**quantizer_common, "bits": 4, "observer": "minmax"}
+        if args.activation_bits == 4
+        else None
+    )
     report = replace_wan_linears(
         pipe.model,
         block_transforms,
-        {**quantizer_common, "observer": args.weight_observer},
-        {**quantizer_common, "observer": "minmax"},
+        weight_quantizer_kwargs,
+        activation_quantizer_kwargs,
     )
     report.transform_stats = get_wan_transform_stats(block_transforms)
     quantized, quantized_seconds = generate(pipe, args)
 
-    reference_path = args.output_dir / "bf16.mp4"
-    quantized_path = args.output_dir / "givens_w4a4.mp4"
-    cache_video(reference[None], save_file=str(reference_path), fps=4)
-    cache_video(quantized[None], save_file=str(quantized_path), fps=4)
+    method_name = f"{args.transform_class}_w{args.weight_bits}a{args.activation_bits}"
+    quantized_path = args.output_dir / f"{method_name}.mp4"
+    cache_video(quantized[None], save_file=str(quantized_path), fps=args.fps)
 
     summary = {
         "prompt": args.prompt,
         "seed": args.seed,
         "size": [args.width, args.height],
         "frames": args.frames,
+        "fps": args.fps,
         "steps": args.steps,
-        "transform": "givens",
+        "transform": args.transform_class,
         "transform_group_size": args.transform_group_size,
         "outlier_threshold": args.outlier_threshold,
         "format": "mxfp",
-        "weight_bits": 4,
-        "activation_bits": 4,
+        "weight_bits": args.weight_bits,
+        "activation_bits": args.activation_bits,
         "quant_group_size": args.quant_group_size,
         "replaced_linears": report.replaced_count,
         "skipped": report.skipped,
         "transform_stats": report.transform_stats,
         "bf16_seconds": reference_seconds,
-        "givens_w4a4_seconds": quantized_seconds,
+        "quantized_seconds": quantized_seconds,
         "decoded_video": video_metrics(reference, quantized),
         "bf16_video": str(reference_path),
-        "givens_w4a4_video": str(quantized_path),
+        "quantized_video": str(quantized_path),
         "note": "Fake quantization measures numerical behavior, not native FP4 speed.",
     }
     summary_path = args.output_dir / "summary.json"

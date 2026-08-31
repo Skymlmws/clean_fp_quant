@@ -329,6 +329,28 @@ The first generation supplies real conditional and unconditional activations
 from every denoising timestep for calibration. The output directory contains
 `bf16.mp4`, `givens_w4a4.mp4`, and `summary.json`.
 
+The same entry point accepts `--transform-class identity|hadamard|givens`,
+`--weight-bits 4|16`, and `--activation-bits 4|16`. To run the standard
+Identity/Hadamard/Givens comparison matrix on two GPUs with one shared BF16
+reference:
+
+```shell
+GPU_A=2 GPU_B=3 WIDTH=832 HEIGHT=480 FRAMES=81 FPS=16 STEPS=50 \
+  ./run_wan_quant_matrix.sh
+```
+
+Before tuning Givens, profile the untouched BF16/W16A16 linear inputs:
+
+```shell
+DEVICE_ID=2 WIDTH=832 HEIGHT=480 FRAMES=81 STEPS=50 \
+  ./run_wan_activation_profile.sh
+```
+
+This records bounded streaming statistics at the seven shared transform sites
+in every DiT block. It produces per-call/timestep CSV data, raw channel
+statistics, layer-by-site outlier heatmaps, and sorted channel-max curves. No
+transform or fake quantizer is inserted during this profiling pass.
+
 ### Citation
 ---
 
