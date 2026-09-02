@@ -127,7 +127,16 @@ def write_outputs(profile: dict, output_dir: Path, metadata: dict) -> None:
     with (output_dir / "activation_calls.csv").open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(records[0])); writer.writeheader(); writer.writerows(records)
     for metric, matrix in matrices.items():
-        heatmap(matrix, [f"block {i}" for i in range(layer_count)], groups, f"W16A16 activation: {metric}", output_dir / f"heatmap_{metric}.png")
+        if metric in ("absmax", "rms", "p99", "p999"):
+            heatmap(
+                matrix, [f"block {i}" for i in range(layer_count)], groups,
+                f"W16A16 activation: {metric} (cells are absolute values)",
+                output_dir / f"heatmap_{metric}.png",
+                color_matrix=np.log10(np.maximum(matrix, 1e-12)),
+                scale_label="log10 color; cell text is raw",
+            )
+        else:
+            heatmap(matrix, [f"block {i}" for i in range(layer_count)], groups, f"W16A16 activation: {metric}", output_dir / f"heatmap_{metric}.png")
     absmax = matrices["absmax"]
     heatmap(
         absmax,
@@ -139,7 +148,15 @@ def write_outputs(profile: dict, output_dir: Path, metadata: dict) -> None:
         scale_label="log10",
     )
     channel_plot(profile, output_dir / "sorted_channel_absmax.png")
-    summary = {**metadata, "model_calls": profile["model_calls"], "sites": len(profile["sites"]), "artifacts": ["activation_stats.pt", "activation_calls.csv", *[f"heatmap_{x}.png" for x in matrices], "heatmap_absmax_log10.png", "sorted_channel_absmax.png"]}
+    absolute_rows = []
+    for group in groups:
+        calls = [call for key, site in profile["sites"].items() if key.endswith("." + group) for call in site["calls"]]
+        for metric in ("absmax", "rms", "p99", "p999"):
+            values = np.asarray([float(call[metric]) for call in calls])
+            absolute_rows.append({"group": group, "metric": metric, "minimum": float(values.min()), "median": float(np.median(values)), "mean": float(values.mean()), "maximum": float(values.max())})
+    with (output_dir / "activation_absolute_ranges.csv").open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(absolute_rows[0])); writer.writeheader(); writer.writerows(absolute_rows)
+    summary = {**metadata, "model_calls": profile["model_calls"], "sites": len(profile["sites"]), "artifacts": ["activation_stats.pt", "activation_calls.csv", "activation_absolute_ranges.csv", *[f"heatmap_{x}.png" for x in matrices], "heatmap_absmax_log10.png", "sorted_channel_absmax.png"]}
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 
 

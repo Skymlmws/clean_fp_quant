@@ -351,6 +351,100 @@ in every DiT block. It produces per-call/timestep CSV data, raw channel
 statistics, layer-by-site outlier heatmaps, and sorted channel-max curves. No
 transform or fake quantizer is inserted during this profiling pass.
 
+Profile all 300 BF16 DiT Linear weights and measure their direct Identity
+MXFP4 W4 fake-quantization error with:
+
+```shell
+DEVICE_ID=2 ./run_wan_weight_profile.sh
+```
+
+The weight report is aligned with the same seven transform sites and includes
+raw outlier metrics, per-32-value block dynamic range, W4 relative MSE/SQNR,
+and input-channel outlier curves.
+
+Render the actual token-by-channel activation matrix at each selected DiT
+block and transform site as a 3D bar chart:
+
+```shell
+DEVICE_ID=2 BLOCKS=all SITES=ffn_in STEPS=3 CALL_INDEX=0 \
+  ./run_wan_activation_surfaces.sh
+```
+
+The horizontal axes are channel and token. Every token-channel pair is one
+vertical column whose height is the absolute activation magnitude. Normal
+values are blue and values above `--outlier-percentile` (p99.99 by default) are
+highlighted in red, following the visual convention of DuQuant Figure 1(a)(b).
+The demo defaults to three denoising steps, captures call 0,
+and keeps every token and channel. Its compressed NPZ contains the complete
+matrix, the full activation range, and original token/channel indices. `SITES=ffn_in` is the shell-script
+default so that `BLOCKS=all` produces one full 3D bar chart per Transformer block;
+use `SITES=all` when all seven shared Linear-input sites are wanted. Optional
+positive `--max-tokens` and `--max-channels` values enable explicit sampling;
+a smaller `--z-percentile` can optionally suppress extreme peaks.
+The NPZ always keeps the complete matrix. To avoid overplotting in the static
+PNG, at most 50,000 evenly distributed blue context bars are shown by default,
+while every red outlier is retained from the full matrix. Adjust this display
+budget with `--max-background-bars`.
+Each activation directory also contains `heatmap.png`, a full token-by-channel
+top view of absolute activation magnitude. It uses power-normalized `magma`
+colors so moderate structure remains visible beside outliers; tune it with
+`--heatmap-percentile` and `--heatmap-gamma`.
+
+Each run is organized by call, block, and site:
+
+```text
+outputs/wan-activation-surfaces-.../
+├── config.json
+├── manifest.json
+└── call_000/
+    ├── timestep.json
+    ├── block_00/ffn_in/
+    │   ├── bars.png
+    │   ├── activation.npz
+    │   └── metadata.json
+    └── block_01/ffn_in/
+        └── ...
+```
+
+`config.json` contains run settings, `manifest.json` indexes every artifact,
+and each `metadata.json` records tensor shapes, axes, value range, and source
+Linear. The NPZ stores the activation matrix once plus its token/channel
+indices.
+
+Activation rendering is resumable at artifact boundaries. Completed triplets
+(`activation.npz`, `bars.png`, `heatmap.png`, and `metadata.json`) are skipped when the same
+command is rerun. Generation pauses after 200 GiB by default, or after the
+optional `MAX_IMAGES` limit, and records progress in `state.json`. Inspect a
+batch and explicitly remove it only after downloading:
+
+```shell
+python manage_wan_artifacts.py status outputs/<batch>
+python manage_wan_artifacts.py acknowledge-download outputs/<batch> \
+  --delete --confirmation downloaded
+```
+
+The launcher monitors the project-wide `outputs/` directory by default, so the
+200 GiB limit includes historical results and all parallel GPU workers. Override
+`QUOTA_DIR` only when a narrower quota is intentionally required. Status may be
+queried for the complete root, but deletion is restricted to explicit child
+batch directories.
+
+Render Linear weight matrices with the same 3D outlier style, using input
+channel, output channel, and absolute weight magnitude as the three axes:
+
+```shell
+DEVICE=cpu BLOCKS=0 SITES=ffn_in ./run_wan_weight_bars.sh
+```
+
+Unlike activation capture, this reads weights directly from the checkpoint and
+does not run video generation. Outputs are organized as
+`block_00/ffn_in/ffn_0/{bars.png,weight.npz,metadata.json}`. Shared sites such
+as `self_qkv` produce a separate directory for each member Linear. Weight plots
+default to an evenly spaced 512 by 512 view because FFN matrices contain
+millions of values that cannot be resolved in a static image. Zero plot limits
+explicitly request the complete matrix; sampling affects only visualization and
+never modifies checkpoint weights.
+
 ### Citation
 ---
 
