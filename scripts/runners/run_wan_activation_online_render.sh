@@ -21,7 +21,7 @@ ISOLATED_MERGE_TOKEN_GAP="${ISOLATED_MERGE_TOKEN_GAP:-1}"
 OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/activation-visualization/wan-activation-long-prompts/wan-activation-480p-seed${SEED}-long-prompt-online-heatmaps}"
 
 cd "${PROJECT_ROOT}"
-"${PYTHON}" capture_render_wan_activations_online.py \
+"${PYTHON}" -m scripts.profile.capture_render_wan_activations_online \
   --device-id "${DEVICE_ID}" \
   --seed "${SEED}" \
   --sampling-steps "${SAMPLING_STEPS}" \

@@ -12,7 +12,7 @@ import torch
 from src.utils.wan_activation_disk_capture import QuotaExceeded, WanActivationDiskCapture
 from src.utils.wan_activation_surface import parse_indices
 from src.utils.wan_utils import WAN_LINEAR_TRANSFORM_GROUPS
-from visualize_wan_activation_surfaces import selected_sites
+from scripts.visualize.visualize_wan_activation_surfaces import selected_sites
 
 
 def parse_args() -> argparse.Namespace:

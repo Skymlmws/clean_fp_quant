@@ -43,7 +43,7 @@ OUTPUT=${OUTPUT:-"${OUTPUT_DIR}/${RUN_NAME}.json"}
 mkdir -p "${OUTPUT_DIR}"
 cd "${PROJECT_ROOT}"
 
-"${PYTHON}" quantize_wan.py \
+"${PYTHON}" -m scripts.generate.quantize_wan \
     --checkpoint "${CHECKPOINT}" \
     --wan-repo "${WAN_REPO}" \
     --device "${DEVICE}" \

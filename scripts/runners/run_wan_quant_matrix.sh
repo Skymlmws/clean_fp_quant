@@ -30,7 +30,7 @@ if [[ ! -f "${REFERENCE_TENSOR}" ]]; then
     echo "Creating shared BF16 reference on GPU ${GPU_A}"
     common_env DEVICE_ID="${GPU_A}" TRANSFORM_CLASS=identity WEIGHT_BITS=16 \
         ACTIVATION_BITS=16 REFERENCE_ONLY=1 \
-        OUTPUT_DIR="${MATRIX_ROOT}/bf16" ./run_wan_givens_video.sh
+        OUTPUT_DIR="${MATRIX_ROOT}/bf16" "${PROJECT_ROOT}/scripts/runners/run_wan_givens_video.sh"
 fi
 
 run_arm() {
@@ -40,7 +40,7 @@ run_arm() {
     common_env DEVICE_ID="${gpu}" TRANSFORM_CLASS="${transform}" \
         WEIGHT_BITS="${weight_bits}" ACTIVATION_BITS="${activation_bits}" \
         OUTPUT_DIR="${MATRIX_ROOT}/${method}" \
-        RUN_NAME="${method}" ./run_wan_givens_video.sh \
+        RUN_NAME="${method}" "${PROJECT_ROOT}/scripts/runners/run_wan_givens_video.sh" \
         >"${MATRIX_ROOT}/${method}.log" 2>&1
 }
 

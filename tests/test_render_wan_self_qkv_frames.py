@@ -1,6 +1,6 @@
 import torch
 
-from render_wan_self_qkv_frames import frame_view, video_token_grid
+from scripts.visualize.render_wan_self_qkv_frames import frame_view, video_token_grid
 
 
 def test_video_token_grid_for_wan_480p():

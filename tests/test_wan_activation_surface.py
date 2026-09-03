@@ -6,10 +6,10 @@ import torch
 import torch.nn as nn
 
 from src.utils.wan_activation_disk_capture import WanActivationDiskCapture
-from capture_render_wan_activations_online import WanOnlineActivationRenderer
+from scripts.profile.capture_render_wan_activations_online import WanOnlineActivationRenderer
 from src.utils.wan_activation_surface import activation_matrix, parse_indices, sampled_activation_matrix
-from render_wan_self_qkv_frames import channel_outliers
-from visualize_wan_activation_surfaces import artifact_relative_dir, branch_for_call, call_relative_dir, downsample, output_usage, render_bars, render_heatmap, selected_sites
+from scripts.visualize.render_wan_self_qkv_frames import channel_outliers
+from scripts.visualize.visualize_wan_activation_surfaces import artifact_relative_dir, branch_for_call, call_relative_dir, downsample, output_usage, render_bars, render_heatmap, selected_sites
 
 
 def test_activation_matrix_selects_batch_and_flattens_tokens():

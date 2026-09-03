@@ -62,7 +62,7 @@ echo "Running Wan2.1 ${TRANSFORM_CLASS} + MXFP quantization video generation"
 echo "GPU: cuda:${DEVICE_ID}"
 echo "Output: ${OUTPUT_DIR}"
 
-"${PYTHON}" generate_wan_givens_video.py \
+"${PYTHON}" -m scripts.generate.generate_wan_givens_video \
     --checkpoint "${CHECKPOINT}" \
     --wan-repo "${WAN_REPO}" \
     --device-id "${DEVICE_ID}" \

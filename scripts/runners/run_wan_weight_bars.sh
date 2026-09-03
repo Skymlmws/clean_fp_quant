@@ -10,6 +10,6 @@ LINEARS="${LINEARS:-all}"
 OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/profiles/wan-weight-bars}"
 
 cd "${PROJECT_ROOT}"
-"${PYTHON}" visualize_wan_weight_bars.py \
+"${PYTHON}" -m scripts.visualize.visualize_wan_weight_bars \
   --device "${DEVICE}" --blocks "${BLOCKS}" --sites "${SITES}" \
   --linears "${LINEARS}" --output-dir "${OUTPUT_DIR}" "$@"

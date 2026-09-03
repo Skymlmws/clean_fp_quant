@@ -1,7 +1,7 @@
 import torch
 
 from src.quantization.quantizer import Quantizer
-from visualize_wan_weights import analyze_weight
+from scripts.visualize.visualize_wan_weights import analyze_weight
 
 
 def test_analyze_weight_reports_mxfp4_error_and_channels():

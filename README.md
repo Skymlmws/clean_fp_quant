@@ -11,11 +11,27 @@ This repository contains the code needed to reproduce the results presented in t
 
 The repository is structured as follows:
 
-* `model_quant.py` - the main quantization script
-* `src/` - source code with implementation of all necessary functionality \
-    ```├── quantization``` - quantization functionality \
-    ```├── transforms``` - transform functionality \
-    ```├── utils``` - utility functions
+* `model_quant.py` - the original FP-Quant quantization entry point
+* `src/` - reusable FP-Quant and Wan quantization implementation
+* `scripts/generate/` - Wan quantization and video-generation entry points
+* `scripts/profile/` - activation capture and online profiling entry points
+* `scripts/visualize/` - artifact rendering and visualization entry points
+* `scripts/maintenance/` - artifact migration and cleanup utilities
+* `scripts/runners/` - reproducible shell launchers for common experiments
+* `tests/` - unit and integration tests
+
+Run Python entry points as modules from the repository root, for example:
+
+```shell
+python -m scripts.generate.quantize_wan --help
+python -m scripts.visualize.visualize_wan_weights --help
+```
+
+The shell launchers may be invoked directly, for example:
+
+```shell
+./scripts/runners/run_wan_givens_video.sh
+```
 
 ### Environment setup
 ---
@@ -294,7 +310,7 @@ depend on the LLM model loader. The current implementation performs fake RTN
 quantization of the 300 Linear layers inside the 30 DiT blocks.
 
 ```shell
-python quantize_wan.py \
+python -m scripts.generate.quantize_wan \
   --checkpoint /path/to/Wan2.1-T2V-1.3B \
   --wan-repo /path/to/Wan2.1 \
   --device cuda:0 \
@@ -315,7 +331,7 @@ To calibrate Givens during a real BF16 denoising pass and then generate a
 matching Givens+MXFP4 W4A4 video with the same prompt and seed:
 
 ```shell
-python generate_wan_givens_video.py \
+python -m scripts.generate.generate_wan_givens_video \
   --checkpoint /path/to/Wan2.1-T2V-1.3B \
   --wan-repo /path/to/Wan2.1 \
   --device-id 0 \
@@ -418,8 +434,8 @@ optional `MAX_IMAGES` limit, and records progress in `state.json`. Inspect a
 batch and explicitly remove it only after downloading:
 
 ```shell
-python manage_wan_artifacts.py status outputs/activation-visualization/<batch>
-python manage_wan_artifacts.py acknowledge-download outputs/activation-visualization/<batch> \
+python -m scripts.maintenance.manage_wan_artifacts status outputs/activation-visualization/<batch>
+python -m scripts.maintenance.manage_wan_artifacts acknowledge-download outputs/activation-visualization/<batch> \
   --delete --confirmation downloaded
 ```
 

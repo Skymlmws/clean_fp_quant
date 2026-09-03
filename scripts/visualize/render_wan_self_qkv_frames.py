@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from visualize_wan_activation_surfaces import plt, render_heatmap
+from scripts.visualize.visualize_wan_activation_surfaces import plt, render_heatmap
 
 
 def parse_args() -> argparse.Namespace:

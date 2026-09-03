@@ -12,7 +12,7 @@ SEED="${SEED:-0}"
 OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/profiles/wan-w16a16-profile-${WIDTH}x${HEIGHT}-${FRAMES}f-${STEPS}steps-seed${SEED}}"
 
 cd "${PROJECT_ROOT}"
-"${PYTHON}" visualize_wan_activations.py \
+"${PYTHON}" -m scripts.visualize.visualize_wan_activations \
   --device-id "${DEVICE_ID}" --width "${WIDTH}" --height "${HEIGHT}" \
   --frames "${FRAMES}" --steps "${STEPS}" --seed "${SEED}" \
   --output-dir "${OUTPUT_DIR}" "$@"

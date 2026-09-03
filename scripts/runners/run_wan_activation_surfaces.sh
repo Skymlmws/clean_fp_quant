@@ -27,7 +27,7 @@ fi
 if [[ "${CAPTURE_ONLY}" == "1" ]]; then
   EXTRA_ARGS+=(--capture-only)
 fi
-"${PYTHON}" visualize_wan_activation_surfaces.py \
+"${PYTHON}" -m scripts.visualize.visualize_wan_activation_surfaces \
   --device-id "${DEVICE_ID}" --width "${WIDTH}" --height "${HEIGHT}" \
   --frames "${FRAMES}" --steps "${STEPS}" --seed "${SEED}" \
   --blocks "${BLOCKS}" --sites "${SITES}" --call-index "${CALL_INDEX}" \

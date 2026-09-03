@@ -15,7 +15,7 @@ from matplotlib.colors import PowerNorm
 import numpy as np
 import torch
 
-from render_wan_self_qkv_frames import frame_view, parse_selection, video_token_grid
+from scripts.visualize.render_wan_self_qkv_frames import frame_view, parse_selection, video_token_grid
 from src.utils.wan_activation_outliers import isolated_token_outliers, persistent_channel_outliers
 
 

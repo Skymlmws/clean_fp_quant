@@ -19,7 +19,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from render_wan_self_qkv_frames import (
+from scripts.visualize.render_wan_self_qkv_frames import (
     activation_statistics,
     append_channel_outliers,
     channel_outliers,
@@ -31,7 +31,7 @@ from src.utils.wan_activation_disk_capture import branch_for_call
 from src.utils.wan_activation_outliers import isolated_token_outliers
 from src.utils.wan_activation_surface import parse_indices
 from src.utils.wan_utils import WAN_LINEAR_TRANSFORM_GROUPS
-from visualize_wan_activation_surfaces import render_heatmap, selected_sites
+from scripts.visualize.visualize_wan_activation_surfaces import render_heatmap, selected_sites
 
 
 DEFAULT_PROMPT = (

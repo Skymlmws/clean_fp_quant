@@ -1,6 +1,6 @@
 import torch
 
-from render_wan_activation_artifacts import sampled_view
+from scripts.visualize.render_wan_activation_artifacts import sampled_view
 
 
 def test_sampled_view_limits_only_the_render_view():

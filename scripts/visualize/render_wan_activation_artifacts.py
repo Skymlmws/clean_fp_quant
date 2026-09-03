@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from visualize_wan_activation_surfaces import evenly_spaced_indices, render_bars, render_heatmap
+from scripts.visualize.visualize_wan_activation_surfaces import evenly_spaced_indices, render_bars, render_heatmap
 
 
 def parse_args() -> argparse.Namespace:
@@ -118,4 +118,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

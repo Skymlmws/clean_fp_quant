@@ -4,7 +4,7 @@ import json
 import torch
 import torch.nn as nn
 
-from capture_render_wan_activations_online import WanOnlineActivationRenderer
+from scripts.profile.capture_render_wan_activations_online import WanOnlineActivationRenderer
 
 
 def test_multiprocess_renderer_uses_shared_activation_and_writes_results(tmp_path):

@@ -1,6 +1,6 @@
 import torch
 
-from visualize_wan_weight_bars import safe_linear_name, sample_weight, selected_linears
+from scripts.visualize.visualize_wan_weight_bars import safe_linear_name, sample_weight, selected_linears
 
 
 def test_sample_weight_keeps_complete_matrix_when_limits_are_zero():
