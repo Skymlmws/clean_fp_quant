@@ -32,7 +32,7 @@ REFERENCE_TENSOR="${REFERENCE_TENSOR:-}"
 REFERENCE_ONLY="${REFERENCE_ONLY:-0}"
 
 RUN_NAME="${RUN_NAME:-wan1.3b-${TRANSFORM_CLASS}-mxfp4-w${WEIGHT_BITS}a${ACTIVATION_BITS}-${WIDTH}x${HEIGHT}-${FRAMES}f-${STEPS}steps-seed${SEED}}"
-OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/${RUN_NAME}}"
+OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/video-quantization-runs/${RUN_NAME}}"
 
 if [[ ! -x "${PYTHON}" ]]; then
     echo "Python environment not found or not executable: ${PYTHON}" >&2

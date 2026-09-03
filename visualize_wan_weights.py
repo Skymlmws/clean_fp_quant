@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--wan-repo", type=Path, default=Path("/home/maoliming/project/wan2.1"))
     p.add_argument("--device-id", type=int, default=2)
     p.add_argument("--group-size", type=int, default=32)
-    p.add_argument("--output-dir", type=Path, default=Path("outputs/wan_w16_weight_profile"))
+    p.add_argument("--output-dir", type=Path, default=Path("outputs/profiles/wan_w16_weight_profile"))
     return p.parse_args()
 
 

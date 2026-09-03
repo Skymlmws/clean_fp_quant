@@ -40,6 +40,7 @@ class WanActivationDiskCapture:
         blocks: Iterable[int],
         sites: Iterable[str],
         call_indices: Iterable[int],
+        batch_index: int = 0,
     ) -> None:
         self.model = model
         self.output_dir = output_dir
@@ -48,8 +49,12 @@ class WanActivationDiskCapture:
         self.blocks = list(blocks)
         self.sites = list(sites)
         self.target_calls = set(call_indices)
+        self.batch_index = batch_index
         self.call_index = -1
         self.timestep = float("nan")
+        self.effective_text_token_count: int | None = None
+        self.text_token_mask: list[bool] | None = None
+        self.text_context_by_call: dict[int, dict[str, Any]] = {}
         self.handles: list[torch.utils.hooks.RemovableHandle] = []
         self.completed = 0
         self.skipped = 0
@@ -63,6 +68,32 @@ class WanActivationDiskCapture:
         timestep = inputs[1] if len(inputs) > 1 else kwargs.get("t")
         if isinstance(timestep, torch.Tensor) and timestep.numel():
             self.timestep = timestep.detach().float().flatten()[0].item()
+        context = inputs[2] if len(inputs) > 2 else kwargs.get("context")
+        if isinstance(context, (list, tuple)) and context:
+            if not 0 <= self.batch_index < len(context):
+                raise IndexError(
+                    f"batch-index {self.batch_index} is outside text context batch "
+                    f"[0, {len(context)})"
+                )
+            selected_context = context[self.batch_index]
+            if isinstance(selected_context, torch.Tensor) and selected_context.ndim >= 1:
+                effective_count = int(selected_context.shape[0])
+                padded_count = int(getattr(self.model, "text_len", effective_count))
+                if effective_count > padded_count:
+                    raise ValueError(
+                        f"Effective text length {effective_count} exceeds padded length "
+                        f"{padded_count}"
+                    )
+                self.effective_text_token_count = effective_count
+                self.text_token_mask = [True] * effective_count + [False] * (
+                    padded_count - effective_count
+                )
+                self.text_context_by_call[self.call_index] = {
+                    "effective_token_count": effective_count,
+                    "padded_token_count": padded_count,
+                    "token_mask": self.text_token_mask,
+                    "mask_semantics": "true marks an effective UMT5 token; false marks right padding",
+                }
 
     def _save(self, value: torch.Tensor, block: int, site: str, linear: str) -> None:
         destination = artifact_dir(self.output_dir, self.call_index, block, site)
@@ -104,6 +135,15 @@ class WanActivationDiskCapture:
             "complete": True,
             "files": {"activation": "activation.pt"},
         }
+        if self.effective_text_token_count is not None and self.text_token_mask is not None:
+            metadata["text_context"] = {
+                "effective_token_count": self.effective_text_token_count,
+                "padded_token_count": len(self.text_token_mask),
+                "token_mask": self.text_token_mask,
+                "mask_semantics": (
+                    "true marks an effective UMT5 token; false marks right padding"
+                ),
+            }
         metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
         self.bytes_written += actual_bytes
         self.completed += 1

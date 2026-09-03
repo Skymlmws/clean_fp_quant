@@ -27,6 +27,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image-height", type=int, default=1200)
     parser.add_argument("--heatmap-percentile", type=float, default=99.9)
     parser.add_argument("--heatmap-gamma", type=float, default=0.45)
+    parser.add_argument(
+        "--channel-rms-ratio", type=float, default=5.0,
+        help="Minimum robust channel RMS divided by the median robust channel RMS",
+    )
+    parser.add_argument(
+        "--mark-top-channels", type=int, default=8,
+        help="Maximum persistent bright channels marked on each heatmap; 0 disables",
+    )
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -79,6 +87,60 @@ def activation_statistics(values: np.ndarray) -> dict[str, float]:
             if median_channel_rms else float("inf")
         ),
     }
+
+
+def channel_outliers(
+    values: np.ndarray,
+    channel_indices: np.ndarray,
+    minimum_rms_ratio: float,
+    maximum_channels: int,
+) -> list[dict[str, float | int]]:
+    """Rank persistent bright lines by per-channel 95%-winsorized RMS."""
+    if minimum_rms_ratio <= 0:
+        raise ValueError("channel-rms-ratio must be positive")
+    if maximum_channels < 0:
+        raise ValueError("mark-top-channels must be non-negative")
+    if maximum_channels == 0:
+        return []
+    magnitudes = np.abs(values.astype(np.float32, copy=False))
+    channel_rms = np.sqrt(np.mean(np.square(magnitudes), axis=0))
+    channel_p95 = np.percentile(magnitudes, 95.0, axis=0)
+    robust_rms = np.sqrt(
+        np.mean(np.square(np.minimum(magnitudes, channel_p95[None, :])), axis=0)
+    )
+    median_rms = float(np.median(robust_rms))
+    if median_rms <= 0:
+        return []
+    ratios = robust_rms / median_rms
+    candidates = np.flatnonzero(ratios >= minimum_rms_ratio)
+    if candidates.size == 0:
+        return []
+    order = candidates[np.argsort(ratios[candidates])[::-1]][:maximum_channels]
+    return [
+        {
+            "channel": int(channel_indices[index]),
+            "rms": float(channel_rms[index]),
+            "robust_rms": float(robust_rms[index]),
+            "robust_rms_over_median": float(ratios[index]),
+            "max_abs": float(magnitudes[:, index].max()),
+        }
+        for index in order
+    ]
+
+
+def append_channel_outliers(
+    annotation: str, records: list[dict[str, float | int]]
+) -> str:
+    if not records:
+        return annotation + "\nmarked channels: none"
+    lines = [annotation, "marked persistent channels:"]
+    lines.extend(
+        f"ch {record['channel']}: robust RMS/median "
+        f"{record['robust_rms_over_median']:.2f}, "
+        f"max {record['max_abs']:.4g}"
+        for record in records
+    )
+    return "\n".join(lines)
 
 
 def statistics_annotation(statistics: dict[str, float]) -> str:
@@ -192,6 +254,14 @@ def main() -> None:
         "axis": {"x": "channel", "y": "spatial token (row-major H x W)"},
         "heatmap_percentile": args.heatmap_percentile,
         "heatmap_gamma": args.heatmap_gamma,
+        "channel_marker": {
+            "score": (
+                "per-channel 95%-winsorized RMS over tokens divided by median "
+                "winsorized channel RMS"
+            ),
+            "minimum_ratio": args.channel_rms_ratio,
+            "maximum_channels": args.mark_top_channels,
+        },
     }
     (output_root / "config.json").write_text(json.dumps(run_config, indent=2) + "\n")
 
@@ -256,6 +326,12 @@ def main() -> None:
                 frame_destination.mkdir(parents=True, exist_ok=True)
                 values = frame_view(activation, frame, grid).float().numpy()
                 frame_stats = activation_statistics(values)
+                frame_outlier_channels = channel_outliers(
+                    values,
+                    np.arange(channel_count, dtype=np.int64),
+                    args.channel_rms_ratio,
+                    args.mark_top_channels,
+                )
                 shared_color_max = frame_stats["max"]
                 tokens = np.arange(values.shape[0], dtype=np.int64)
                 overview = np.abs(values).reshape(
@@ -278,7 +354,9 @@ def main() -> None:
                     args.heatmap_percentile,
                     args.heatmap_gamma,
                     use_bin_edges=True,
-                    annotation_text=statistics_annotation(frame_stats),
+                    annotation_text=append_channel_outliers(
+                        statistics_annotation(frame_stats), frame_outlier_channels
+                    ),
                     color_max_override=shared_color_max,
                 )
                 temporary.replace(overview_path)
@@ -288,6 +366,10 @@ def main() -> None:
                     end = start + shard_width
                     shard_values = values[:, start:end]
                     shard_stats = activation_statistics(shard_values)
+                    shard_outlier_channels = [
+                        record for record in frame_outlier_channels
+                        if start <= record["channel"] < end
+                    ]
                     image_path = shard_paths[shard_index]
                     temporary = frame_destination / f"{image_path.stem}.partial.png"
                     shard_render = render_heatmap(
@@ -301,8 +383,14 @@ def main() -> None:
                         args.heatmap_percentile,
                         args.heatmap_gamma,
                         use_bin_edges=True,
-                        annotation_text=ffn_out_slice_annotation(frame_stats, shard_stats),
+                        annotation_text=append_channel_outliers(
+                            ffn_out_slice_annotation(frame_stats, shard_stats),
+                            shard_outlier_channels,
+                        ),
                         color_max_override=shared_color_max,
+                        marked_channels=[
+                            record["channel"] for record in shard_outlier_channels
+                        ],
                     )
                     temporary.replace(image_path)
                     rendered += 1
@@ -329,6 +417,7 @@ def main() -> None:
                             "summary": summary_path.name,
                         },
                         "statistics": shard_stats,
+                        "channel_outliers": shard_outlier_channels,
                         "render": shard_render,
                         "summary_render": summary_render,
                     })
@@ -341,6 +430,7 @@ def main() -> None:
                     "matrix_shape": list(values.shape),
                     "shared_color_max": shared_color_max,
                     "statistics": frame_stats,
+                    "channel_outliers": frame_outlier_channels,
                     "overview": {
                         "matrix_shape": list(overview.shape),
                         "source_channel_count": channel_count,
@@ -381,6 +471,9 @@ def main() -> None:
             activation_stats = activation_statistics(values)
             tokens = np.arange(values.shape[0], dtype=np.int64)
             channels = np.arange(values.shape[1], dtype=np.int64)
+            outlier_channels = channel_outliers(
+                values, channels, args.channel_rms_ratio, args.mark_top_channels
+            )
             temporary = destination / "heatmap.partial.png"
             stats = render_heatmap(
                 values, tokens, channels,
@@ -388,7 +481,10 @@ def main() -> None:
                 f"block {block} | text tokens",
                 temporary, args.image_width, args.image_height,
                 args.heatmap_percentile, args.heatmap_gamma, use_bin_edges=True,
-                annotation_text=statistics_annotation(activation_stats),
+                annotation_text=append_channel_outliers(
+                    statistics_annotation(activation_stats), outlier_channels
+                ),
+                marked_channels=[record["channel"] for record in outlier_channels],
             )
             temporary.replace(image_path)
             metadata = {
@@ -397,7 +493,7 @@ def main() -> None:
                 "block": block, "site": site, "token_kind": "text",
                 "matrix_shape": list(values.shape), "complete": True,
                 "files": {"heatmap": image_path.name}, "statistics": activation_stats,
-                "render": stats,
+                "channel_outliers": outlier_channels, "render": stats,
             }
             metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
             rendered += 1
@@ -432,6 +528,9 @@ def main() -> None:
             activation_stats = activation_statistics(values)
             tokens = np.arange(values.shape[0], dtype=np.int64)
             channels = np.arange(values.shape[1], dtype=np.int64)
+            outlier_channels = channel_outliers(
+                values, channels, args.channel_rms_ratio, args.mark_top_channels
+            )
             title = (
                 f"Wan {site} | sampling step {step} | timestep {source_metadata['timestep']} | "
                 f"block {block} | latent frame {frame}/{grid[0] - 1} | "
@@ -443,7 +542,10 @@ def main() -> None:
                 args.image_width, args.image_height,
                 args.heatmap_percentile, args.heatmap_gamma,
                 use_bin_edges=True,
-                annotation_text=statistics_annotation(activation_stats),
+                annotation_text=append_channel_outliers(
+                    statistics_annotation(activation_stats), outlier_channels
+                ),
+                marked_channels=[record["channel"] for record in outlier_channels],
             )
             temporary.replace(image_path)
             frame_records[frame] = {
@@ -453,6 +555,7 @@ def main() -> None:
                 "complete_frame": True,
                 "files": {"heatmap": image_path.name},
                 "statistics": activation_stats,
+                "channel_outliers": outlier_channels,
                 "render": stats,
             }
             rendered += 1

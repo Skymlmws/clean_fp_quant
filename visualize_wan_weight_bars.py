@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--outlier-percentile", type=float, default=99.9)
     parser.add_argument("--image-width", type=int, default=1400)
     parser.add_argument("--image-height", type=int, default=900)
-    parser.add_argument("--output-dir", type=Path, default=Path("outputs/wan-weight-bars"))
+    parser.add_argument("--output-dir", type=Path, default=Path("outputs/profiles/wan-weight-bars"))
     return parser.parse_args()
 
 

@@ -50,7 +50,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--quant-group-size", type=int, default=32)
     parser.add_argument("--weight-observer", choices=("minmax", "mse"), default="minmax")
     parser.add_argument(
-        "--output-dir", type=Path, default=Path("outputs/wan_givens_w4a4_video")
+        "--output-dir", type=Path,
+        default=Path("outputs/video-quantization-runs/wan_givens_w4a4_video")
     )
     parser.add_argument(
         "--reference-tensor",

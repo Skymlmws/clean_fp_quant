@@ -1,0 +1,87 @@
+{
+  "format_version": 1,
+  "tokenizer": "Wan2.1-T2V-1.3B/google/umt5-xxl",
+  "token_count_includes_special_tokens": true,
+  "prompts": [
+    {
+      "id": "coastal_market",
+      "title": "Coastal market at dawn",
+      "output_slug": "long-coastal-market",
+      "word_count": 175,
+      "umt5_token_count": 250,
+      "prompt": "A cinematic wide shot follows a young woman in a weathered yellow raincoat walking through a crowded coastal market at dawn. Fishing boats rock beside the wooden pier while vendors arrange silver fish, red crabs, green vegetables, woven baskets, glass bottles, and bright fabric beneath striped canvas awnings. She carries a small blue suitcase and moves steadily from the foreground toward the center of the market as people cross naturally in both directions. A brown dog runs past her, several white gulls circle overhead, and loose paper flutters across the wet stone pavement in the sea breeze. The camera begins with a slow forward tracking movement at waist height, then gently rises and pans left to reveal the harbor, distant mountains, and a lighthouse partially hidden by morning mist. Warm sunlight breaks through gray clouds, creating long reflections in puddles and soft volumetric rays between the stalls. Faces, clothing, signs, ropes, nets, and waves remain detailed and temporally consistent. Natural motion, realistic physics, subtle depth of field, cinematic composition, rich but balanced colors, no cuts."
+    },
+    {
+      "id": "snow_forest",
+      "title": "Wildlife photographer in a snowy forest",
+      "output_slug": "long-snow-forest",
+      "word_count": 184,
+      "umt5_token_count": 257,
+      "prompt": "A continuous cinematic tracking shot follows an elderly wildlife photographer wearing a dark green parka as he crosses a snowy pine forest in the early morning. He carries a camera with a long lens and carefully steps around exposed roots, frozen branches, gray rocks, and patches of deep powder. Two red foxes emerge from behind a fallen tree, pause beside a narrow stream, and move quietly across the foreground while a small herd of deer walks between distant trunks. Fine snow falls from the branches whenever the wind moves through the canopy, and the photographer slowly kneels to frame the animals without startling them. The camera travels beside him at shoulder height, circles gently toward the front, then pulls back to reveal a broad valley, layered mountains, and pale clouds glowing above the treeline. Cold blue shadows contrast with warm sunrise light touching the snow and the edges of his coat. Footprints, breath vapor, fur, bark, ice, and drifting snow remain sharp and temporally stable. Realistic animal motion, natural body mechanics, restrained camera movement, atmospheric depth, detailed winter lighting, one uninterrupted shot, no cuts."
+    },
+    {
+      "id": "rainy_city",
+      "title": "Bicycle courier in a rainy city",
+      "output_slug": "long-rainy-city",
+      "word_count": 185,
+      "umt5_token_count": 273,
+      "prompt": "A smooth cinematic night shot follows a bicycle courier riding through a busy rain-soaked city intersection filled with pedestrians, electric buses, compact cars, and glowing storefronts. The courier wears a silver helmet and a bright orange jacket, carrying a square black delivery bag while weaving carefully between moving vehicles. Reflections from blue signs, red traffic lights, yellow taxis, and white headlights stretch across the wet asphalt. Steam rises from a street-food cart, umbrellas tilt in the wind, water sprays from passing tires, and a train moves across an elevated bridge in the background. The camera begins low beside the rear wheel, accelerates into a parallel tracking view, then rises smoothly above the courier as the intersection opens into a long avenue lined with glass towers and older brick buildings. The rider turns left, avoids a puddle, and passes beneath strings of lanterns without changing speed abruptly. Raindrops, fabric, wheel spokes, road markings, faces, windows, and distant traffic remain coherent across frames. Realistic traffic flow, physically accurate water motion, controlled camera movement, deep perspective, cinematic neon lighting, detailed urban atmosphere, a single continuous take, no cuts."
+    },
+    {
+      "id": "rover_workshop",
+      "title": "Engineers assembling a rover",
+      "output_slug": "long-rover-workshop",
+      "word_count": 193,
+      "umt5_token_count": 281,
+      "prompt": "A detailed cinematic shot moves slowly through a sunlit mechanical workshop where three engineers assemble a small red exploration rover on a steel workbench. One engineer tightens bolts on a jointed wheel, another connects colored cables beneath an open control panel, and a third studies a tablet displaying diagrams while pointing toward a rotating sensor mast. Shelves behind them hold labeled boxes, brass gears, hand tools, circuit boards, ceramic parts, coiled wires, safety goggles, and half-finished prototypes. A robotic arm lifts a battery module from the left side of the room and places it carefully beside the rover as indicator lights blink in a steady sequence. Dust floats through shafts of afternoon sunlight, a ceiling fan turns slowly, and translucent curtains move near an open window. The camera starts with a close view of precise hand movements, slides sideways along the workbench, then pulls back and rises to show the complete workshop and a large testing area painted with navigation markers. Hands, tools, cables, screens, reflections, and mechanical components remain geometrically consistent. Realistic human motion, plausible machinery, accurate material textures, balanced warm and cool light, gradual depth-of-field changes, one uninterrupted shot, no cuts."
+    },
+    {
+      "id": "underwater_ruins",
+      "title": "Marine biologist above underwater ruins",
+      "output_slug": "long-underwater-ruins",
+      "word_count": 190,
+      "umt5_token_count": 265,
+      "prompt": "An expansive underwater cinematic shot follows a marine biologist in a white diving suit swimming above the ruins of an ancient stone courtyard surrounded by coral reefs. She carries a compact light and a waterproof camera while two other divers move slowly behind her, maintaining a safe distance. Schools of silver fish turn together around broken columns, orange reef fish pass through carved archways, and a large sea turtle glides from the background toward a garden of purple coral. Sunbeams ripple down from the surface, illuminating suspended particles, waving plants, pale sand, blue ceramic fragments, and weathered statues covered with algae. The camera travels backward in front of the biologist, rotates gently around a central column, then descends to reveal a mosaic floor and a narrow passage leading deeper into the ruins. Her bubbles rise naturally and expand, loose straps respond to the current, and sand lifts briefly when a fin passes close to the ground. Divers, animals, architecture, and lighting remain stable across frames. Realistic buoyancy, fluid motion, coherent fish behavior, detailed stone and coral textures, deep blue atmospheric perspective, smooth camera movement, a single continuous shot, no cuts."
+    },
+    {
+      "id": "desert_observatory",
+      "title": "Astronomers preparing a desert observatory",
+      "output_slug": "long-desert-observatory",
+      "word_count": 196,
+      "umt5_token_count": 277,
+      "prompt": "A continuous cinematic dusk shot follows two astronomers preparing a remote observatory on a high desert plateau. One scientist in a burgundy jacket rolls a silver equipment case across the gravel while the other adjusts a large white telescope beneath a slowly opening dome. Rows of solar panels reflect the fading orange sky, cables run between portable computers and weather instruments, and small indicator lights blink beside neatly labeled control boxes. In the distance, three wind turbines turn above layered red cliffs as a dusty utility vehicle travels along a winding road. The camera begins close to gloved hands fastening a sensor, slides backward through the observatory doorway, then arcs around the telescope and rises to reveal the entire plateau. Twilight deepens gradually from gold to violet, the first stars become visible, and a thin crescent moon appears above scattered clouds. A sudden breeze moves loose straps, paper notes, jacket fabric, and dry grass without disturbing the heavy instruments. Reflections, shadows, screens, mechanical joints, footprints, and distant terrain remain coherent across frames. Realistic human motion, accurate machinery, restrained wind effects, smooth camera movement, natural exposure changes, detailed metal and rock textures, one uninterrupted shot, no cuts."
+    },
+    {
+      "id": "autumn_station",
+      "title": "Historic train arriving at an autumn station",
+      "output_slug": "long-autumn-station",
+      "word_count": 195,
+      "umt5_token_count": 273,
+      "prompt": "A richly detailed cinematic morning shot follows a stationmaster walking along an old countryside railway platform as a dark green steam train approaches through pale autumn fog. He wears a navy uniform, carries a brass lantern, and raises one arm to signal while travelers arrange leather suitcases, flower baskets, folded bicycles, and wooden crates beneath the iron canopy. Red and yellow leaves tumble across the platform, pigeons lift from the roof, and warm vapor drifts around the train wheels as they begin to slow. Through the carriage windows, passengers turn their heads and reach for bags while a dining attendant steadies cups on a small table. The camera tracks beside the stationmaster at knee height, passes a row of painted signs and benches, then cranes upward as the locomotive enters and reveals farmland, a stone bridge, and hills covered with copper-colored trees. Morning sunlight cuts through the mist, producing long soft shadows and highlights on wet rails. Smoke, steam, clothing, luggage, wheel rods, faces, window reflections, and falling leaves remain temporally consistent. Plausible train mechanics, natural crowd movement, realistic atmospheric motion, balanced warm and cool colors, gradual focus changes, a single continuous take, no cuts."
+    },
+    {
+      "id": "festival_kitchen",
+      "title": "Chefs working in an outdoor festival kitchen",
+      "output_slug": "long-festival-kitchen",
+      "word_count": 197,
+      "umt5_token_count": 289,
+      "prompt": "A lively continuous cinematic shot moves through an outdoor festival kitchen where five chefs prepare a large evening meal beneath strings of warm lanterns. At the first table, a chef chops green herbs and red peppers while another folds small dumplings into even rows. Nearby, copper pots simmer over blue flames, skewers rotate above glowing charcoal, and a baker removes round loaves from a portable stone oven. Assistants carry ceramic bowls between stations as families gather beyond a low wooden barrier and musicians tune instruments near a fabric-covered stage. Steam curls upward, sparks drift briefly from the grill, colorful flags ripple overhead, and polished knives reflect moving points of light. The camera begins above baskets filled with vegetables, glides between the worktables at hand level, circles a chef tossing noodles in a black pan, then pulls back to reveal the crowded square and an old clock tower against the deepening blue sky. Every hand action remains purposeful and distinct; food, utensils, plates, flames, faces, and clothing retain their shape and position across frames. Realistic cooking physics, natural group coordination, controlled camera motion, layered foreground and background activity, detailed textures, cinematic mixed lighting, one uninterrupted shot, no cuts."
+    },
+    {
+      "id": "glacier_rescue",
+      "title": "Mountain rescue team crossing a glacier",
+      "output_slug": "long-glacier-rescue",
+      "word_count": 193,
+      "umt5_token_count": 287,
+      "prompt": "An expansive cinematic tracking shot follows a four-person mountain rescue team crossing a blue glacier under rapidly changing afternoon clouds. The lead climber wears a red insulated suit and tests the ice with a pole while the others move in a measured line connected by a bright yellow rope. They carry helmets, radios, medical packs, metal carabiners, and a folded rescue sled that shifts naturally with each step. Fine snow streams across the surface, loose rope forms gentle curves, and fragments of ice slide into a narrow crevasse beside their route. A helicopter appears far above the valley, banks slowly, and disappears behind a jagged ridge without approaching the team. The camera starts near their crampons biting into translucent ice, travels parallel at waist height, then sweeps ahead and rises to reveal fractured glacier patterns, dark rock walls, and distant peaks illuminated by a break in the clouds. Breath vapor, footprints, straps, shadows, and reflective goggles respond consistently to movement and wind. Human spacing and rope tension remain physically plausible across frames. Realistic climbing technique, stable anatomy, detailed snow and ice materials, deep atmospheric perspective, restrained camera motion, one continuous shot, no cuts."
+    },
+    {
+      "id": "museum_restoration",
+      "title": "Conservators restoring a mechanical clock",
+      "output_slug": "long-museum-restoration",
+      "word_count": 195,
+      "umt5_token_count": 277,
+      "prompt": "A precise cinematic interior shot follows three museum conservators restoring an enormous astronomical clock inside a quiet vaulted gallery. One conservator uses fine tweezers to place a tiny brass gear, another cleans an engraved silver dial with a soft brush, and the third compares the mechanism with drawings spread beneath a glass lamp. Hundreds of interlocking wheels, springs, chains, painted constellations, numbered rings, and small enamel figures fill the open wooden case. In the background, tall windows cast cool daylight across stone columns while visitors move slowly behind a velvet rope and their reflections pass over protective display glass. The clock begins a controlled test cycle: a blue globe rotates, a miniature bell lifts, and several pointers advance together by a small amount. The camera opens with an extreme close view of turning teeth, slides along the workbench past labeled trays and magnifying lenses, then rises in a gentle semicircle to show the complete clock and patterned ceiling. Hands, tools, gears, reflections, diagrams, and moving indicators remain geometrically stable. Accurate mechanical motion, careful human gestures, subtle dust in light beams, natural depth of field, balanced color, smooth camera movement, a single uninterrupted take, no cuts."
+    }
+  ]
+}

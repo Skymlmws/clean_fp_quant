@@ -322,7 +322,7 @@ python generate_wan_givens_video.py \
   --prompt "A small red panda walking in a bamboo forest." \
   --width 128 --height 128 --frames 5 --steps 4 \
   --outlier-threshold 5 \
-  --output-dir outputs/wan_givens_w4a4_video
+  --output-dir outputs/video-quantization-runs/wan_givens_w4a4_video
 ```
 
 The first generation supplies real conditional and unconditional activations
@@ -393,7 +393,7 @@ colors so moderate structure remains visible beside outliers; tune it with
 Each run is organized by call, block, and site:
 
 ```text
-outputs/wan-activation-surfaces-.../
+outputs/activation-visualization/wan-activation-surfaces-.../
 ├── config.json
 ├── manifest.json
 └── call_000/
@@ -418,8 +418,8 @@ optional `MAX_IMAGES` limit, and records progress in `state.json`. Inspect a
 batch and explicitly remove it only after downloading:
 
 ```shell
-python manage_wan_artifacts.py status outputs/<batch>
-python manage_wan_artifacts.py acknowledge-download outputs/<batch> \
+python manage_wan_artifacts.py status outputs/activation-visualization/<batch>
+python manage_wan_artifacts.py acknowledge-download outputs/activation-visualization/<batch> \
   --delete --confirmation downloaded
 ```
 

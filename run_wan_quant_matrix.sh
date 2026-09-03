@@ -12,7 +12,7 @@ STEPS="${STEPS:-50}"
 SEED="${SEED:-0}"
 PROMPT="${PROMPT:-A small red panda walking in a bamboo forest.}"
 OUTLIER_THRESHOLD="${OUTLIER_THRESHOLD:-3}"
-MATRIX_ROOT="${MATRIX_ROOT:-${PROJECT_ROOT}/outputs/matrix-${WIDTH}x${HEIGHT}-${FRAMES}f-${STEPS}steps-seed${SEED}}"
+MATRIX_ROOT="${MATRIX_ROOT:-${PROJECT_ROOT}/outputs/video-quantization-runs/matrix-${WIDTH}x${HEIGHT}-${FRAMES}f-${STEPS}steps-seed${SEED}}"
 REFERENCE_TENSOR="${REFERENCE_TENSOR:-${MATRIX_ROOT}/bf16_reference.pt}"
 
 mkdir -p "${MATRIX_ROOT}"

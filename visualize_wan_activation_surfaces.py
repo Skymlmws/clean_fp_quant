@@ -53,7 +53,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-output-gb", type=float, default=200.0, help="Pause after this output size; 0 disables")
     parser.add_argument("--max-images", type=int, default=0, help="Pause after this many completed images; 0 disables")
     parser.add_argument("--quota-dir", type=Path, help="Shared directory used for size/image limits across workers")
-    parser.add_argument("--output-dir", type=Path, default=Path("outputs/wan-activation-surfaces"))
+    parser.add_argument(
+        "--output-dir", type=Path,
+        default=Path("outputs/activation-visualization/wan-activation-surfaces"),
+    )
     return parser.parse_args()
 
 
@@ -165,7 +168,10 @@ def render_heatmap(
     use_bin_edges: bool = False,
     annotation_text: str | None = None,
     color_max_override: float | None = None,
-) -> dict[str, float]:
+    marked_channels: list[int] | None = None,
+    channel_marker_labels: dict[int, str] | None = None,
+    marked_points: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
     """Render the full absolute activation matrix as a readable 2D heatmap."""
     if not 0 < color_percentile <= 100:
         raise ValueError("heatmap percentile must be in (0, 100]")
@@ -183,7 +189,10 @@ def render_heatmap(
     else:
         x_extent = (float(channel_indices[0]), float(channel_indices[-1]))
         y_extent = (float(token_indices[0]), float(token_indices[-1]))
-    annotation_width = 400 if annotation_text else 0
+    marker_labels = channel_marker_labels or {
+        channel: f"ch {channel}" for channel in (marked_channels or [])
+    }
+    annotation_width = (560 if marker_labels else 400) if annotation_text else 0
     canvas_width = width + annotation_width
     figure, axis = plt.subplots(figsize=(canvas_width / 160, height / 160), dpi=160, facecolor="white")
     image = axis.imshow(
@@ -202,6 +211,46 @@ def render_heatmap(
         axis.set_xticks(np.linspace(x_extent[0], x_extent[1], 9))
         axis.set_yticks(np.linspace(y_extent[0], y_extent[1], 9))
     axis.set_title(title, fontsize=10)
+    for channel, marker_label in marker_labels.items():
+        marker_x = channel + (0.5 if use_bin_edges else 0.0)
+        axis.scatter(
+            [marker_x],
+            [-0.012],
+            transform=axis.get_xaxis_transform(),
+            marker="^",
+            s=22,
+            color="#00e5ff",
+            edgecolors="black",
+            linewidths=0.35,
+            clip_on=False,
+            zorder=5,
+        )
+        axis.text(
+            marker_x,
+            -0.032,
+            marker_label,
+            transform=axis.get_xaxis_transform(),
+            rotation=0,
+            horizontalalignment="center",
+            verticalalignment="top",
+            fontsize=6.5,
+            color="#00e5ff",
+            bbox={"facecolor": "black", "edgecolor": "none", "alpha": 0.55, "pad": 1.0},
+            clip_on=False,
+        )
+    for point in marked_points or []:
+        marker_x = float(point["channel"]) + (0.5 if use_bin_edges else 0.0)
+        marker_y = float(point["token"]) + (0.5 if use_bin_edges else 0.0)
+        axis.scatter(
+            [marker_x], [marker_y], marker="o", s=42,
+            facecolors="none", edgecolors="#39ff14", linewidths=1.0,
+            clip_on=True, zorder=6,
+        )
+        axis.annotate(
+            str(point.get("label", "")), (marker_x, marker_y), xytext=(4, 4),
+            textcoords="offset points", fontsize=6.5, color="#39ff14",
+            clip_on=True, zorder=7,
+        )
     colorbar = figure.colorbar(image, ax=axis, pad=0.02)
     colorbar.set_label("|Activation|")
     if annotation_text:
@@ -224,6 +273,9 @@ def render_heatmap(
         "heatmap_percentile": color_percentile,
         "heatmap_gamma": gamma,
         "color_max_override": color_max_override,
+        "marked_channels": list(marked_channels or []),
+        "channel_marker_labels": marker_labels,
+        "marked_points": list(marked_points or []),
     }
 
 

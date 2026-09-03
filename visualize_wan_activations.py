@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--device-id", type=int, default=2)
     p.add_argument("--sample-elements", type=int, default=65536)
     p.add_argument("--group-size", type=int, default=32)
-    p.add_argument("--output-dir", type=Path, default=Path("outputs/wan_w16a16_activation_profile"))
+    p.add_argument("--output-dir", type=Path, default=Path("outputs/profiles/wan_w16a16_activation_profile"))
     return p.parse_args()
 
 

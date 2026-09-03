@@ -35,7 +35,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sites", default="all")
     parser.add_argument("--quota-dir", type=Path, default=Path("outputs"))
     parser.add_argument("--max-output-gb", type=float, default=200.0)
-    parser.add_argument("--output-dir", type=Path, default=Path("outputs/wan-activation-480p-seed0-full-bf16"))
+    parser.add_argument(
+        "--output-dir", type=Path,
+        default=Path("outputs/activation-visualization/wan-activation-short-prompt/wan-activation-480p-seed0-full-bf16"),
+    )
     return parser.parse_args()
 
 
@@ -73,6 +76,7 @@ def main() -> None:
     capture = WanActivationDiskCapture(
         pipe.model, args.output_dir, args.quota_dir,
         int(args.max_output_gb * 1024**3), blocks, sites, call_indices,
+        batch_index=0,
     )
     config = {
         "mode": "complete activation capture stored as BF16",
@@ -106,6 +110,10 @@ def main() -> None:
         capture.remove()
     total_complete = sum(1 for path in args.output_dir.rglob("activation.pt") if (path.parent / "metadata.json").exists())
     status = "complete" if total_complete == expected else "incomplete"
+    config["text_context_by_call"] = {
+        str(call): metadata for call, metadata in sorted(capture.text_context_by_call.items())
+    }
+    (args.output_dir / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     write_state(args.output_dir, status, capture, expected)
     print(json.dumps({"status": status, "complete": total_complete, "expected": expected, "output_dir": str(args.output_dir)}, indent=2))
 

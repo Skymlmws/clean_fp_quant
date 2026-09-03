@@ -6,7 +6,7 @@ PYTHON="${PYTHON:-/home/maoliming/project/.venv/bin/python}"
 DEVICE_ID="${DEVICE_ID:-2}"
 SEED="${SEED:-0}"
 SAMPLING_STEPS="${SAMPLING_STEPS:-10,25,40}"
-OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/wan-activation-480p-seed${SEED}-full-bf16}"
+OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/activation-visualization/wan-activation-short-prompt/wan-activation-480p-seed${SEED}-full-bf16}"
 
 cd "${PROJECT_ROOT}"
 "${PYTHON}" capture_wan_activations_bf16.py \
@@ -14,4 +14,3 @@ cd "${PROJECT_ROOT}"
   --sampling-steps "${SAMPLING_STEPS}" \
   --quota-dir "${PROJECT_ROOT}/outputs" --max-output-gb 200 \
   --output-dir "${OUTPUT_DIR}" "$@"
-

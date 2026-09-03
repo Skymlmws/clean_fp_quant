@@ -16,7 +16,7 @@ CALL_INDICES="${CALL_INDICES:-}"
 CAPTURE_ONLY="${CAPTURE_ONLY:-0}"
 MAX_OUTPUT_GB="${MAX_OUTPUT_GB:-200}"
 MAX_IMAGES="${MAX_IMAGES:-0}"
-OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/wan-activation-surfaces-${WIDTH}x${HEIGHT}-${FRAMES}f-${STEPS}steps-seed${SEED}}"
+OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/activation-visualization/wan-activation-surfaces-${WIDTH}x${HEIGHT}-${FRAMES}f-${STEPS}steps-seed${SEED}}"
 QUOTA_DIR="${QUOTA_DIR:-${PROJECT_ROOT}/outputs}"
 
 cd "${PROJECT_ROOT}"
