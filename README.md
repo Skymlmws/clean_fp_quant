@@ -19,11 +19,13 @@ The repository is structured as follows:
 * `model_quant.py` - the original FP-Quant quantization entry point
 * `src/` - reusable FP-Quant and Wan quantization implementation
 * `scripts/generate/` - Wan quantization and video-generation entry points
-* `scripts/profile/` - activation capture and online profiling entry points
-* `scripts/visualize/` - artifact rendering and visualization entry points
-* `scripts/maintenance/` - artifact migration and cleanup utilities
-* `scripts/runners/` - reproducible shell launchers for common experiments
-* `tests/` - unit and integration tests
+* `video_quant_lab/analysis/` - method-independent capture, rendering, and analysis
+* `video_quant_lab/prompts/` - prompt sets shared across baseline experiments
+* `video_quant_lab/tests/` - harness, analysis, and visualization tests
+* `scripts/visualize/` - FP-Quant-specific visualization entry points
+* `video_quant_lab/runners/` - method-independent profiling and visualization launchers
+* `scripts/runners/` - FP-Quant/Givens-specific experiment launchers
+* `tests/` - tests for the local FP-Quant/Givens baseline extensions
 
 Run Python entry points as modules from the repository root, for example:
 
@@ -364,7 +366,7 @@ Before tuning Givens, profile the untouched BF16/W16A16 linear inputs:
 
 ```shell
 DEVICE_ID=2 WIDTH=832 HEIGHT=480 FRAMES=81 STEPS=50 \
-  ./run_wan_activation_profile.sh
+  ./video_quant_lab/runners/run_wan_activation_profile.sh
 ```
 
 This records bounded streaming statistics at the seven shared transform sites
@@ -388,7 +390,7 @@ block and transform site as a 3D bar chart:
 
 ```shell
 DEVICE_ID=2 BLOCKS=all SITES=ffn_in STEPS=3 CALL_INDEX=0 \
-  ./run_wan_activation_surfaces.sh
+  ./video_quant_lab/runners/run_wan_activation_surfaces.sh
 ```
 
 The horizontal axes are channel and token. Every token-channel pair is one
@@ -439,8 +441,8 @@ optional `MAX_IMAGES` limit, and records progress in `state.json`. Inspect a
 batch and explicitly remove it only after downloading:
 
 ```shell
-python -m scripts.maintenance.manage_wan_artifacts status outputs/activation-visualization/<batch>
-python -m scripts.maintenance.manage_wan_artifacts acknowledge-download outputs/activation-visualization/<batch> \
+python -m video_quant_lab.analysis.cli.manage_wan_artifacts status outputs/activation-visualization/<batch>
+python -m video_quant_lab.analysis.cli.manage_wan_artifacts acknowledge-download outputs/activation-visualization/<batch> \
   --delete --confirmation downloaded
 ```
 
@@ -454,7 +456,7 @@ Render Linear weight matrices with the same 3D outlier style, using input
 channel, output channel, and absolute weight magnitude as the three axes:
 
 ```shell
-DEVICE=cpu BLOCKS=0 SITES=ffn_in ./run_wan_weight_bars.sh
+DEVICE=cpu BLOCKS=0 SITES=ffn_in ./video_quant_lab/runners/run_wan_weight_bars.sh
 ```
 
 Unlike activation capture, this reads weights directly from the checkpoint and

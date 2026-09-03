@@ -14,7 +14,7 @@ import torch.nn as nn
 
 from src.quantization.quantizer import Quantizer
 from src.utils.wan_utils import WAN_LINEAR_TRANSFORM_GROUPS
-from scripts.visualize.visualize_wan_activations import channel_plot, heatmap
+from video_quant_lab.analysis.cli.visualize_wan_activations import channel_plot, heatmap
 
 
 def parse_args() -> argparse.Namespace:

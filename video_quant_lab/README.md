@@ -9,8 +9,11 @@ are execution targets, not Python dependencies of the harness.
 - `baseline_manifests/`: declare each upstream repository, interpreter, command,
   and output argument
 - `experiments/`: pass arguments in each baseline's own CLI format
-- `analysis/`: project-owned evaluation, visualization, and result aggregation
-  will move here incrementally
+- `prompts/`: project-owned prompt sets used across baselines
+- `analysis/`: project-owned activation analysis has started moving here;
+  visualization CLIs and result aggregation will follow incrementally
+- `runners/`: convenient shell entry points for project-owned analysis tools
+- `tests/`: harness, analysis, rendering, and visualization tests
 
 The harness never imports baseline implementation code. A baseline may use its
 own repository, environment, dependency versions, and command-line interface.
@@ -52,3 +55,10 @@ after it falls into two groups:
 The existing repository root remains the first baseline workspace during the
 migration. It can be replaced by a separate clone after project-owned analysis
 code has been extracted.
+
+Run project-owned and baseline-specific tests separately:
+
+```shell
+python -m pytest -q video_quant_lab/tests
+python -m pytest -q tests
+```

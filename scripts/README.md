@@ -4,10 +4,12 @@ The reusable implementation lives under `src/`. This directory contains thin
 command-line entry points grouped by workflow:
 
 - `generate/`: quantization and video generation
-- `profile/`: activation capture and online profiling
-- `visualize/`: rendering and analysis of captured artifacts
-- `maintenance/`: artifact migration and lifecycle utilities
-- `runners/`: shell launchers with environment-variable defaults
+- `visualize/`: FP-Quant-specific visualization that imports its quantizer
+- `runners/`: FP-Quant/Givens-specific shell launchers
+
+Method-independent capture, rendering, and artifact tools now live under
+`video_quant_lab/analysis/cli`. Existing shell runners remain compatibility
+entry points under `video_quant_lab/runners/`.
 
 Run Python entry points from the repository root with module syntax:
 
