@@ -35,6 +35,33 @@ def test_build_plan_keeps_baseline_as_an_external_command(tmp_path, monkeypatch)
     )
 
 
+def test_build_plan_preserves_virtualenv_python_symlink(tmp_path, monkeypatch):
+    repository = tmp_path / "upstream"
+    repository.mkdir()
+    virtualenv_python = tmp_path / ".venv" / "bin" / "python"
+    virtualenv_python.parent.mkdir(parents=True)
+    virtualenv_python.symlink_to(Path("/usr/bin/python3"))
+    monkeypatch.delenv("TEST_SYMLINK_REPO", raising=False)
+    monkeypatch.delenv("TEST_SYMLINK_PYTHON", raising=False)
+    manifest = BaselineManifest(
+        name="symlinked_python",
+        repository_env="TEST_SYMLINK_REPO",
+        repository_default=str(repository),
+        python_env="TEST_SYMLINK_PYTHON",
+        command=("{python}", "upstream.py"),
+        output_arguments=(),
+        python_default=str(virtualenv_python),
+    )
+
+    plan = build_plan(
+        Experiment("trial", "symlinked_python", (), {}),
+        manifest,
+        tmp_path / "runs",
+    )
+
+    assert plan.command[0] == str(virtualenv_python)
+
+
 def test_execute_records_command_logs_and_status(tmp_path):
     repository = tmp_path / "upstream"
     repository.mkdir()

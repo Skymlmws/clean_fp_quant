@@ -53,7 +53,14 @@ def build_plan(
 
     run_dir = (output_root / (run_name or experiment.name)).resolve()
     artifact_dir = run_dir / "artifacts"
-    python = os.environ.get(manifest.python_env) or sys.executable
+    python = os.environ.get(manifest.python_env) or manifest.python_default or sys.executable
+    python_path = Path(os.path.expandvars(python)).expanduser()
+    if not python_path.is_absolute():
+        python_path = Path.cwd() / python_path
+    # Keep the configured path rather than resolving symlinks. Virtualenv Python
+    # executables are commonly symlinks to the system interpreter, but invoking
+    # the symlink is what activates that environment's package search path.
+    python = str(python_path.absolute())
     variables = {
         "python": python,
         "repository": str(repository),
@@ -82,6 +89,8 @@ def plan_record(plan: RunPlan) -> dict[str, object]:
         "schema_version": 1,
         "experiment": asdict(plan.experiment),
         "baseline": plan.manifest.name,
+        "source_url": plan.manifest.source_url,
+        "source_revision": plan.manifest.source_revision,
         "repository": str(plan.repository),
         "repository_commit": _git_commit(plan.repository),
         "run_dir": str(plan.run_dir),

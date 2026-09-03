@@ -188,3 +188,6 @@ outputs/
 vbench_cache/
 vbench_inputs/
 vbench_results/
+
+# External baseline source checkouts
+video_quant_lab/baselines/*/source/

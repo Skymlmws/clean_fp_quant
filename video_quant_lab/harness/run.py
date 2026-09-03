@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--baselines-dir",
         type=Path,
-        default=Path("video_quant_lab/baseline_manifests"),
+        default=Path("video_quant_lab/baselines"),
     )
     parser.add_argument("--output-root", type=Path, default=Path("outputs/runs"))
     parser.add_argument(
@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     experiment = Experiment.load(args.experiment)
-    manifest_path = args.baselines_dir / f"{experiment.baseline}.json"
+    manifest_path = args.baselines_dir / experiment.baseline / "manifest.json"
     manifest = BaselineManifest.load(manifest_path)
     plan = build_plan(experiment, manifest, args.output_root, run_name=args.run_name)
     if args.dry_run:

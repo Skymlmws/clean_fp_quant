@@ -1,0 +1,6 @@
+{
+  "name": "fp-quant-help-smoke",
+  "baseline": "fp_quant",
+  "arguments": ["--help"],
+  "environment": {}
+}

@@ -29,14 +29,20 @@ class BaselineManifest:
     python_env: str
     command: tuple[str, ...]
     output_arguments: tuple[str, ...]
+    python_default: str | None = None
+    source_url: str | None = None
+    source_revision: str | None = None
 
     @classmethod
     def load(cls, path: Path) -> "BaselineManifest":
         data = json.loads(path.read_text())
         repository = data.get("repository")
         python = data.get("python")
+        source = data.get("source", {})
         if not isinstance(repository, dict) or not isinstance(python, dict):
             raise ValueError(f"{path}: repository and python must be objects")
+        if not isinstance(source, dict):
+            raise ValueError(f"{path}: source must be an object")
         default = repository.get("default")
         if default is not None and not isinstance(default, str):
             raise ValueError(f"{path}: repository.default must be a string or null")
@@ -49,6 +55,9 @@ class BaselineManifest:
             output_arguments=_string_list(
                 data.get("output_arguments", []), "output_arguments", path
             ),
+            python_default=python.get("default"),
+            source_url=source.get("url"),
+            source_revision=source.get("revision"),
         )
 
 

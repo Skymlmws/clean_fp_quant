@@ -6,8 +6,7 @@ are execution targets, not Python dependencies of the harness.
 ## Responsibilities
 
 - `harness/`: launch a baseline as an external process and record provenance
-- `baseline_manifests/`: declare each upstream repository, interpreter, command,
-  and output argument
+- `baselines/`: one isolated source checkout and command manifest per baseline
 - `experiments/`: pass arguments in each baseline's own CLI format
 - `prompts/`: project-owned prompt sets used across baselines
 - `analysis/`: project-owned activation analysis has started moving here;
@@ -23,17 +22,14 @@ own repository, environment, dependency versions, and command-line interface.
 First point the manifest at the relevant repositories and environments:
 
 ```shell
-export FP_QUANT_REPO=/path/to/fp-quant
 export FP_QUANT_PYTHON=/path/to/fp-quant-env/bin/python
-export WAN_CHECKPOINT=/path/to/Wan2.1-T2V-1.3B
-export WAN_REPO=/path/to/wan2.1
 ```
 
 Inspect the exact command without running it:
 
 ```shell
 python -m video_quant_lab.harness.run \
-  --experiment video_quant_lab/experiments/fp_quant_wan_smoke.json \
+  --experiment video_quant_lab/experiments/fp_quant_help_smoke.json \
   --dry-run
 ```
 

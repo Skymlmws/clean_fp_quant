@@ -1,0 +1,23 @@
+{
+  "name": "fp_quant",
+  "source": {
+    "url": "git@github.com:IST-DASLab/FP-Quant.git",
+    "revision": "d2e3092f968262c4de5fb050e1aef568a280dadd"
+  },
+  "repository": {
+    "env": "FP_QUANT_REPO",
+    "default": "video_quant_lab/baselines/fp_quant/source"
+  },
+  "python": {
+    "env": "FP_QUANT_PYTHON",
+    "default": "video_quant_lab/baselines/fp_quant/.venv/bin/python"
+  },
+  "command": [
+    "{python}",
+    "model_quant.py"
+  ],
+  "output_arguments": [
+    "--save_path",
+    "{artifact_dir}"
+  ]
+}
