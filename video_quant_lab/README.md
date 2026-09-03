@@ -1,12 +1,13 @@
 # Video Quantization Lab
 
-This directory is the method-neutral project workspace. Baseline repositories
-are execution targets, not Python dependencies of the harness.
+This directory is the project workspace. Each baseline keeps its own
+implementation and launchers together, while shared analysis stays outside the
+baseline directories.
 
 ## Responsibilities
 
 - `harness/`: launch a baseline as an external process and record provenance
-- `baselines/`: one isolated source checkout and command manifest per baseline
+- `baselines/`: one self-contained implementation and command manifest per baseline
 - `experiments/`: pass arguments in each baseline's own CLI format
 - `prompts/`: project-owned prompt sets used across baselines
 - `analysis/`: project-owned activation analysis has started moving here;
@@ -14,8 +15,8 @@ are execution targets, not Python dependencies of the harness.
 - `runners/`: convenient shell entry points for project-owned analysis tools
 - `tests/`: harness, analysis, rendering, and visualization tests
 
-The harness never imports baseline implementation code. A baseline may use its
-own repository, environment, dependency versions, and command-line interface.
+The harness launches baseline code as an external process. Each baseline may
+keep its own environment, dependencies, and command-line interface.
 
 ## Run an experiment
 
@@ -45,16 +46,13 @@ after it falls into two groups:
 
 1. method-independent profiling, visualization, artifact handling, evaluation,
    and orchestration; these belong in this workspace;
-2. Givens/FP-Quant quantization internals; these belong in the FP-Quant baseline
-   fork and should only be invoked through its command manifest.
-
-The existing repository root remains the first baseline workspace during the
-migration. It can be replaced by a separate clone after project-owned analysis
-code has been extracted.
+2. Givens/FP-Quant quantization internals; these now live directly in
+   `baselines/fp_quant/` together with the upstream FP-Quant implementation.
 
 Run project-owned and baseline-specific tests separately:
 
 ```shell
 python -m pytest -q video_quant_lab/tests
+cd video_quant_lab/baselines/fp_quant
 python -m pytest -q tests
 ```

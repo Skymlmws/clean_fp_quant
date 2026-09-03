@@ -1,17 +1,19 @@
 # Baselines
 
-Each child directory is a self-contained slot for one upstream baseline. It
-contains tracked metadata and an ignored source checkout:
+Each child directory is one self-contained baseline. Implementation code,
+launchers, tests, environment setup, and metadata stay together:
 
 ```text
 baseline_name/
 ├── manifest.json
 ├── README.md
-└── source/
+├── src/
+├── scripts/
+└── tests/
 ```
 
-The harness launches code inside `source/` as an external process. It does not
-reimplement the baseline or import its Python internals.
+The harness launches the baseline directory as an external process. Shared
+project analysis does not reimplement or import the baseline internals.
 
 Each manifest records:
 
@@ -20,6 +22,5 @@ Each manifest records:
 - the upstream command to execute;
 - how the harness passes its assigned artifact directory.
 
-`source/` is ignored by the main repository because it retains its own Git
-history. The manifest pins the upstream URL and revision, and every run records
-the actual checked-out commit.
+The manifest records the upstream URL and base revision when applicable, and
+every run records the main repository commit containing the baseline code.

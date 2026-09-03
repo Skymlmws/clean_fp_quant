@@ -6,9 +6,6 @@ __pycache__/
 # C extensions
 *.so
 
-# files
-givens.py
-
 # Distribution / packaging
 .Python
 build/
@@ -188,6 +185,3 @@ outputs/
 vbench_cache/
 vbench_inputs/
 vbench_results/
-
-# External baseline source checkouts
-video_quant_lab/baselines/*/source/

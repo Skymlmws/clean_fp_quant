@@ -4,7 +4,9 @@ set -euo pipefail
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-8}
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-"expandable_segments:True"}
 
-PROJECT_ROOT=${PROJECT_ROOT:-"/home/maoliming/FP-Quant"}
+BASELINE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+PROJECT_ROOT=${PROJECT_ROOT:-"$(cd -- "${BASELINE_ROOT}/../../.." && pwd)"}
+export PYTHONPATH="${BASELINE_ROOT}:${PROJECT_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 PYTHON=${PYTHON:-"/home/maoliming/project/.venv/bin/python"}
 CHECKPOINT=${CHECKPOINT:-"/home/maoliming/project/checkpoints/Wan2.1-T2V-1.3B"}
 WAN_REPO=${WAN_REPO:-"/home/maoliming/project/wan2.1"}
@@ -41,7 +43,7 @@ RUN_NAME=${RUN_NAME:-"wan1.3b-${FORMAT}-w${W_BITS}a${A_BITS}-${QUANT_METHOD}-${T
 OUTPUT=${OUTPUT:-"${OUTPUT_DIR}/${RUN_NAME}.json"}
 
 mkdir -p "${OUTPUT_DIR}"
-cd "${PROJECT_ROOT}"
+cd "${BASELINE_ROOT}"
 
 "${PYTHON}" -m scripts.generate.quantize_wan \
     --checkpoint "${CHECKPOINT}" \

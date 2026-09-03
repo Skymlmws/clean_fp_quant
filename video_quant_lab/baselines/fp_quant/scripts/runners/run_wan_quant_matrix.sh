@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ROOT="${PROJECT_ROOT:-/home/maoliming/FP-Quant}"
+BASELINE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+PROJECT_ROOT="${PROJECT_ROOT:-$(cd -- "${BASELINE_ROOT}/../../.." && pwd)}"
+WAN_VIDEO_RUNNER="${BASELINE_ROOT}/scripts/runners/run_wan_givens_video.sh"
 GPU_A="${GPU_A:-2}"
 GPU_B="${GPU_B:-3}"
 WIDTH="${WIDTH:-832}"
@@ -16,7 +18,7 @@ MATRIX_ROOT="${MATRIX_ROOT:-${PROJECT_ROOT}/outputs/video-quantization-runs/matr
 REFERENCE_TENSOR="${REFERENCE_TENSOR:-${MATRIX_ROOT}/bf16_reference.pt}"
 
 mkdir -p "${MATRIX_ROOT}"
-cd "${PROJECT_ROOT}"
+cd "${BASELINE_ROOT}"
 
 common_env() {
     env \
@@ -30,7 +32,7 @@ if [[ ! -f "${REFERENCE_TENSOR}" ]]; then
     echo "Creating shared BF16 reference on GPU ${GPU_A}"
     common_env DEVICE_ID="${GPU_A}" TRANSFORM_CLASS=identity WEIGHT_BITS=16 \
         ACTIVATION_BITS=16 REFERENCE_ONLY=1 \
-        OUTPUT_DIR="${MATRIX_ROOT}/bf16" "${PROJECT_ROOT}/scripts/runners/run_wan_givens_video.sh"
+        OUTPUT_DIR="${MATRIX_ROOT}/bf16" "${WAN_VIDEO_RUNNER}"
 fi
 
 run_arm() {
@@ -40,7 +42,7 @@ run_arm() {
     common_env DEVICE_ID="${gpu}" TRANSFORM_CLASS="${transform}" \
         WEIGHT_BITS="${weight_bits}" ACTIVATION_BITS="${activation_bits}" \
         OUTPUT_DIR="${MATRIX_ROOT}/${method}" \
-        RUN_NAME="${method}" "${PROJECT_ROOT}/scripts/runners/run_wan_givens_video.sh" \
+        RUN_NAME="${method}" "${WAN_VIDEO_RUNNER}" \
         >"${MATRIX_ROOT}/${method}.log" 2>&1
 }
 

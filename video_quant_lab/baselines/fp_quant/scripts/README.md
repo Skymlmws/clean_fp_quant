@@ -1,7 +1,7 @@
 # Experiment scripts
 
-The reusable implementation lives under `src/`. This directory contains thin
-command-line entry points grouped by workflow:
+The reusable implementation and these entry points live together inside the
+`fp_quant` baseline directory:
 
 - `generate/`: quantization and video generation
 - `visualize/`: FP-Quant-specific visualization that imports its quantizer
@@ -11,11 +11,12 @@ Method-independent capture, rendering, and artifact tools now live under
 `video_quant_lab/analysis/cli`. Existing shell runners remain compatibility
 entry points under `video_quant_lab/runners/`.
 
-Run Python entry points from the repository root with module syntax:
+Run Python entry points from `video_quant_lab/baselines/fp_quant` with module
+syntax:
 
 ```shell
 python -m scripts.generate.quantize_wan --help
 ```
 
-This keeps imports stable regardless of the entry point's directory. Shell
-launchers change to the repository root before invoking their Python module.
+The shell launchers locate that directory automatically, so they can be called
+from the main project root.

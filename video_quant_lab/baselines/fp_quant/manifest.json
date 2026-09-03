@@ -6,7 +6,7 @@
   },
   "repository": {
     "env": "FP_QUANT_REPO",
-    "default": "video_quant_lab/baselines/fp_quant/source"
+    "default": "video_quant_lab/baselines/fp_quant"
   },
   "python": {
     "env": "FP_QUANT_PYTHON",
