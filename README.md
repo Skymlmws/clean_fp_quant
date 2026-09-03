@@ -4,6 +4,11 @@
 
 The official implementation for the paper [Bridging the Gap Between Promise and Performance for Microscaling FP4 Quantization](https://arxiv.org/abs/2509.23202).
 
+> Project note: the repository root currently remains the FP-Quant baseline
+> workspace. Method-neutral orchestration is being extracted into
+> `video_quant_lab/`, which launches baseline repositories as external commands
+> and does not require them to share implementation code.
+
 This repository contains the code needed to reproduce the results presented in the paper, and it also offers the ability to export quantized models with [QuTLASS](https://github.com/IST-DASLab/qutlass) kernels in the **MXFP4** and **NVFP4 formats**. The exported models can be run either with Hugging Face Transformers or with vLLM.
 
 ### Repository structure

@@ -1,0 +1,27 @@
+{
+  "name": "fp-quant-wan-smoke",
+  "baseline": "fp_quant",
+  "arguments": [
+    "--checkpoint",
+    "${WAN_CHECKPOINT}",
+    "--wan-repo",
+    "${WAN_REPO}",
+    "--device-id",
+    "2",
+    "--width",
+    "64",
+    "--height",
+    "64",
+    "--frames",
+    "1",
+    "--steps",
+    "1",
+    "--transform-class",
+    "identity",
+    "--weight-bits",
+    "16",
+    "--activation-bits",
+    "16"
+  ],
+  "environment": {}
+}
