@@ -27,6 +27,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dtype", choices=("bfloat16", "float16", "float32"), default="bfloat16")
     parser.add_argument("--transform-class", choices=("identity", "hadamard", "givens"), default="givens")
     parser.add_argument("--transform-group-size", type=int, default=32)
+    parser.add_argument("--transform-randomize", action="store_true")
+    parser.add_argument("--transform-seed", type=int, default=0)
     parser.add_argument("--outlier-threshold", type=float, default=50.0)
     parser.add_argument("--weight-bits", type=int, choices=(4, 16), default=4)
     parser.add_argument("--activation-bits", type=int, choices=(4, 16), default=16)
@@ -112,6 +114,8 @@ def main() -> None:
         device,
         transform_class=args.transform_class,
         transform_group_size=args.transform_group_size,
+        transform_randomize=args.transform_randomize,
+        transform_seed=args.transform_seed,
         outlier_threshold=args.outlier_threshold,
         weight_bits=args.weight_bits,
         activation_bits=args.activation_bits,
@@ -133,6 +137,8 @@ def main() -> None:
         "checkpoint": str(args.checkpoint),
         "transform": args.transform_class,
         "transform_group_size": args.transform_group_size,
+        "transform_randomize": args.transform_randomize,
+        "transform_seed": args.transform_seed,
         "outlier_threshold": args.outlier_threshold,
         "weight_bits": args.weight_bits,
         "activation_bits": args.activation_bits,

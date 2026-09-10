@@ -121,16 +121,20 @@ def build_wan_block_transforms(
         raise ValueError("Expected a WanModel-like module with blocks, dim, and ffn_dim")
 
     result = []
-    for _ in model.blocks:
+    base_seed = transform_kwargs.pop("seed", None)
+    for block_idx, _ in enumerate(model.blocks):
         transforms = {}
-        for name in WAN_LINEAR_TRANSFORM_GROUPS:
+        for transform_idx, name in enumerate(WAN_LINEAR_TRANSFORM_GROUPS):
             size = model.ffn_dim if name == "ffn_out" else model.dim
+            current_kwargs = dict(transform_kwargs)
+            if base_seed is not None:
+                current_kwargs["seed"] = base_seed + block_idx * len(WAN_LINEAR_TRANSFORM_GROUPS) + transform_idx
             transforms[name] = build_transform(
                 transform_class,
                 size=size,
                 group_size=group_size,
                 device=device,
-                **transform_kwargs,
+                **current_kwargs,
             )
         result.append(WanBlockTransforms(transforms))
     return result

@@ -32,6 +32,7 @@ def test_multiprocess_renderer_uses_shared_activation_and_writes_results(tmp_pat
         image_height=360,
         heatmap_percentile=100.0,
         heatmap_gamma=1.0,
+        plot_kind="heatmap",
     )
     renderer = WanOnlineActivationRenderer(nn.Module(), args, [], [], [0])
     renderer.call_index = 0
@@ -54,7 +55,7 @@ def test_multiprocess_renderer_uses_shared_activation_and_writes_results(tmp_pat
     for site in ("self_qkv", "self_o"):
         root = tmp_path / "step_000" / "conditional" / "block_00" / site
         metadata = json.loads((root / "metadata.json").read_text())
-        assert metadata["render_schema_version"] == 2
+        assert metadata["render_schema_version"] == 4
         assert metadata["complete"] is True
         assert metadata["activation_stored"] is False
         assert len(list(root.glob("frame_*.png"))) == 2
@@ -65,3 +66,45 @@ def test_multiprocess_renderer_uses_shared_activation_and_writes_results(tmp_pat
     assert isolated[0]["channel"] == 2
     assert renderer.rendered_activations == 3
     assert renderer.rendered_images == 5
+
+
+def test_multiprocess_renderer_writes_reference_surface(tmp_path):
+    args = Namespace(
+        output_dir=tmp_path,
+        max_output_gb=0.0,
+        render_mode="multiprocess",
+        render_workers=1,
+        shared_memory_dir=tmp_path / "shared",
+        max_inflight_activations=1,
+        inflight_memory_fraction=0.25,
+        width=16,
+        height=16,
+        frames=5,
+        channel_rms_ratio=5.0,
+        mark_top_channels=0,
+        isolated_global_percentile=99.99,
+        isolated_channel_percentile=99.0,
+        isolated_ratio=5.0,
+        isolated_max_token_fraction=0.01,
+        mark_top_isolated=0,
+        isolated_merge_token_gap=1,
+        ffn_out_group_size=2,
+        image_width=480,
+        image_height=360,
+        heatmap_percentile=100.0,
+        heatmap_gamma=1.0,
+        plot_kind="surface",
+    )
+    renderer = WanOnlineActivationRenderer(nn.Module(), args, [], [], [0])
+    renderer.call_index = 0
+    renderer._submit(torch.arange(8).reshape(1, 2, 4), 0, "self_qkv", "self_attn.q")
+    renderer.finish()
+
+    root = tmp_path / "step_000" / "conditional" / "block_00" / "self_qkv"
+    metadata = json.loads((root / "metadata.json").read_text())
+    assert len(list(root.glob("surface_frame_*.png"))) == 2
+    assert metadata["plot_kind"] == "surface"
+    assert metadata["records"][0]["renders"]["surface"]["cmap"] == "viridis"
+    assert metadata["records"][0]["renders"]["surface"]["coordinate_range"] == {
+        "channel": [0, 3], "token": [0, 0]
+    }

@@ -73,17 +73,42 @@ class FullTransform(BaseTransform):
 
 class HadamardTransform(BaseTransform):
 
-    def __init__(self, group_size: int = 128):
+    def __init__(
+        self,
+        group_size: int = 128,
+        randomize: bool = False,
+        seed: int = 0,
+    ):
         super().__init__()
+        if group_size <= 1 or group_size & (group_size - 1):
+            raise ValueError("Hadamard group_size must be a power of two greater than one")
         self.group_size = group_size
         self.scale = 1 / math.sqrt(self.group_size)
+        self.randomize = randomize
+        self.seed = seed
+        signs = torch.ones(group_size)
+        if randomize:
+            generator = torch.Generator(device="cpu").manual_seed(seed)
+            signs = torch.randint(0, 2, (group_size,), generator=generator).mul_(2).sub_(1).float()
+        self.register_buffer("signs", signs, persistent=True)
 
     def forward(self, x: torch.Tensor, inv_t: bool = False, dim: int = -1):
-        # Hadamard transform is it own inverse
+        if dim not in (-1, x.ndim - 1):
+            raise ValueError("HadamardTransform currently supports only the last dimension")
+        if x.shape[-1] % self.group_size:
+            raise ValueError(
+                f"Input size {x.shape[-1]} must be divisible by group_size {self.group_size}"
+            )
         x_shape = x.shape
         grouped = x.view(-1, self.group_size)
+        # R = D H / sqrt(g). Applying the same orthogonal R to activations and
+        # weight rows preserves Linear exactly: (x R) (W R)^T = x W^T.
+        signs = self.signs.to(device=x.device, dtype=x.dtype)
+        if self.randomize:
+            grouped = grouped * signs
         if x.device.type == "cuda":
-            return hadamard_transform(grouped, scale=self.scale).view(x_shape)
+            transformed = hadamard_transform(grouped, scale=self.scale)
+            return transformed.view(x_shape)
 
         matrix = torch.ones(1, 1, device=x.device, dtype=x.dtype)
         while matrix.shape[0] < self.group_size:
@@ -91,7 +116,8 @@ class HadamardTransform(BaseTransform):
                 (torch.cat((matrix, matrix), dim=1), torch.cat((matrix, -matrix), dim=1)),
                 dim=0,
             )
-        return (grouped @ matrix.T * self.scale).view(x_shape)
+        transformed = grouped @ matrix.T * self.scale
+        return transformed.view(x_shape)
     
     def remove_parametrizations(self) -> None:
         pass

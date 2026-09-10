@@ -31,7 +31,7 @@ from video_quant_lab.analysis.wan.sites import WAN_LINEAR_SITES
 from video_quant_lab.analysis.wan.wan_activation_disk_capture import branch_for_call
 from video_quant_lab.analysis.wan.wan_activation_outliers import isolated_token_outliers
 from video_quant_lab.analysis.wan.wan_activation_surface import parse_indices
-from video_quant_lab.analysis.cli.visualize_wan_activation_surfaces import render_heatmap, selected_sites
+from video_quant_lab.analysis.cli.visualize_wan_activation_surfaces import plt, render_heatmap, selected_sites
 
 
 DEFAULT_PROMPT = (
@@ -51,7 +51,7 @@ DEFAULT_PROMPT = (
     "composition, rich but balanced colors, no cuts."
 )
 
-ONLINE_RENDER_SCHEMA_VERSION = 2
+ONLINE_RENDER_SCHEMA_VERSION = 4
 
 
 class OutputLimitExceeded(RuntimeError):
@@ -95,6 +95,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image-height", type=int, default=1200)
     parser.add_argument("--heatmap-percentile", type=float, default=100.0)
     parser.add_argument("--heatmap-gamma", type=float, default=1.0)
+    parser.add_argument(
+        "--plot-kind", choices=("heatmap", "surface", "both"), default="heatmap",
+        help="Render 2D heatmaps, 3D surfaces, or both",
+    )
     parser.add_argument("--channel-rms-ratio", type=float, default=5.0)
     parser.add_argument("--mark-top-channels", type=int, default=8)
     parser.add_argument("--isolated-global-percentile", type=float, default=99.99)
@@ -481,31 +485,48 @@ class WanOnlineActivationRenderer:
             annotation += "\nisolated token outliers:"
             annotation += "\n" + ("\n".join(isolated_lines) if isolated_lines else "none")
             tokens = np.arange(values.shape[0], dtype=np.int64)
-            filename = "heatmap.png" if frame is None else f"frame_{frame:03d}.png"
-            image_path = destination / filename
-            temporary = destination / f"{filename}.partial.png"
             frame_text = "text tokens" if frame is None else f"latent frame {frame}/{self.grid[0] - 1}"
-            render = render_heatmap(
-                display_values,
-                tokens,
-                display_channels,
+            title = (
                 f"Wan {job.site} | step {job.call_index // 2} | "
-                f"block {job.block} | {frame_text}",
-                temporary,
-                self.args.image_width,
-                self.args.image_height,
-                self.args.heatmap_percentile,
-                self.args.heatmap_gamma,
-                use_bin_edges=True,
-                annotation_text=annotation,
-                marked_channels=[int(record["channel"]) for record in outliers] if marker_labels is None else None,
-                channel_marker_labels=marker_labels,
-                marked_points=marked_points,
+                f"block {job.block} | {frame_text}"
             )
-            temporary.replace(image_path)
-            self.bytes_written += image_path.stat().st_size
-            self.rendered_images += 1
-            image_files.append(filename)
+            renders: dict[str, dict[str, Any]] = {}
+            if self.args.plot_kind in ("heatmap", "both"):
+                filename = "heatmap.png" if frame is None else f"frame_{frame:03d}.png"
+                image_path = destination / filename
+                temporary = destination / f"{filename}.partial.png"
+                renders["heatmap"] = render_heatmap(
+                    display_values,
+                    tokens,
+                    display_channels,
+                    title,
+                    temporary,
+                    self.args.image_width,
+                    self.args.image_height,
+                    self.args.heatmap_percentile,
+                    self.args.heatmap_gamma,
+                    use_bin_edges=True,
+                    annotation_text=annotation,
+                    marked_channels=[int(record["channel"]) for record in outliers] if marker_labels is None else None,
+                    channel_marker_labels=marker_labels,
+                    marked_points=marked_points,
+                )
+                temporary.replace(image_path)
+                self.bytes_written += image_path.stat().st_size
+                self.rendered_images += 1
+                image_files.append(filename)
+            if self.args.plot_kind in ("surface", "both"):
+                filename = "surface.png" if frame is None else f"surface_frame_{frame:03d}.png"
+                image_path = destination / filename
+                temporary = destination / f"{filename}.partial.png"
+                renders["surface"] = render_surface(
+                    display_values, title, temporary,
+                    self.args.image_width, self.args.image_height,
+                )
+                temporary.replace(image_path)
+                self.bytes_written += image_path.stat().st_size
+                self.rendered_images += 1
+                image_files.append(filename)
             records.append({
                 "latent_frame": frame,
                 "matrix_shape": list(values.shape),
@@ -515,7 +536,7 @@ class WanOnlineActivationRenderer:
                 "isolated_outliers": isolated,
                 "aggregation": aggregation,
                 "file": filename,
-                "render": render,
+                "renders": renders,
             })
             self._check_limit()
         del activation
@@ -533,6 +554,7 @@ class WanOnlineActivationRenderer:
             "text_context": job.text_context,
             "activation_stored": False,
             "online_render": True,
+            "plot_kind": self.args.plot_kind,
             "records": records,
             "image_files": image_files,
             "complete": True,
@@ -605,6 +627,47 @@ def render_job_in_process(
     }
 
 
+def render_surface(
+    values: np.ndarray,
+    title: str,
+    path: Path,
+    width: int,
+    height: int,
+) -> dict[str, Any]:
+    """Render a 3D activation surface using real token and channel indices."""
+    if values.ndim != 2 or not values.size:
+        raise ValueError("Surface values must be a non-empty 2D matrix")
+    z = np.abs(values).astype(np.float32, copy=False)
+    rows, columns = z.shape
+    x = np.arange(columns)
+    y = np.arange(rows)
+    x_grid, y_grid = np.meshgrid(x, y)
+
+    figure = plt.figure(
+        figsize=(width / 160, height / 160), dpi=160, facecolor="white"
+    )
+    axis = figure.add_subplot(111, projection="3d")
+    surface = axis.plot_surface(x_grid, y_grid, z, cmap="viridis")
+    figure.colorbar(surface, ax=axis, shrink=0.5)
+    axis.set_xlabel("Channel")
+    axis.set_ylabel("Token")
+    axis.set_zlabel("|Activation|")
+    axis.set_title(title)
+    figure.tight_layout()
+    figure.savefig(path, dpi=160, facecolor="white")
+    plt.close(figure)
+    return {
+        "kind": "surface",
+        "coordinate_range": {
+            "channel": [0, columns - 1],
+            "token": [0, rows - 1],
+        },
+        "matrix_shape": [rows, columns],
+        "z": "absolute_activation",
+        "cmap": "viridis",
+    }
+
+
 def main() -> None:
     args = parse_args()
     prompt_source = resolve_prompt(args)
@@ -638,6 +701,7 @@ def main() -> None:
         "blocks": blocks,
         "sites": sites,
         "render_mode": args.render_mode,
+        "plot_kind": args.plot_kind,
         "async_queue_capacity": (
             renderer.max_inflight_activations - 1
             if args.render_mode in ("multiprocess", "async") else 0

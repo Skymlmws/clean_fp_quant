@@ -10,6 +10,7 @@ SAMPLING_STEPS="${SAMPLING_STEPS:-10,25,40}"
 MAX_OUTPUT_GB="${MAX_OUTPUT_GB:-0}"
 RENDER_MODE="${RENDER_MODE:-multiprocess}"
 RENDER_WORKERS="${RENDER_WORKERS:-4}"
+PLOT_KIND="${PLOT_KIND:-surface}"
 SHARED_MEMORY_DIR="${SHARED_MEMORY_DIR:-/dev/shm}"
 MAX_INFLIGHT_ACTIVATIONS="${MAX_INFLIGHT_ACTIVATIONS:-0}"
 INFLIGHT_MEMORY_FRACTION="${INFLIGHT_MEMORY_FRACTION:-0.25}"
@@ -29,6 +30,7 @@ cd "${PROJECT_ROOT}"
   --max-output-gb "${MAX_OUTPUT_GB}" \
   --render-mode "${RENDER_MODE}" \
   --render-workers "${RENDER_WORKERS}" \
+  --plot-kind "${PLOT_KIND}" \
   --shared-memory-dir "${SHARED_MEMORY_DIR}" \
   --max-inflight-activations "${MAX_INFLIGHT_ACTIVATIONS}" \
   --inflight-memory-fraction "${INFLIGHT_MEMORY_FRACTION}" \

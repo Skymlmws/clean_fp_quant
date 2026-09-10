@@ -11,7 +11,9 @@ baselines, collecting outputs, and applying shared analysis and evaluation.
 - `video_quant_lab/prompts/`: shared experiment prompts
 - `video_quant_lab/tests/`: scaffold and analysis tests
 - `outputs/`: generated runs and artifacts
-- `vbench_inputs/`, `vbench_results/`, `vbench_cache/`: existing VBench data
+- `vbench_inputs/`, `vbench_cache/`: existing VBench inputs and model cache
+- `vbench_results/<model>/<protocol>/`: official grouped VBench comparisons;
+  exploratory and older runs live under `vbench_results/archive/`
 
 FP-Quant, including the local Wan2.1 and Givens extensions, lives entirely in
 `video_quant_lab/baselines/fp_quant/`.
