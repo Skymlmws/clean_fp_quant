@@ -180,8 +180,19 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-# Local Wan video experiment artifacts
-outputs/
-vbench_cache/
-vbench_inputs/
-vbench_results/
+# Local editor and OS metadata
+.idea/
+.vscode/
+.DS_Store
+
+# Local Wan/VBench inputs, caches, and generated artifacts
+/outputs/
+/vbench_cache/
+/vbench_inputs/
+/vbench_results/
+/checkpoints/
+/video_quant_lab/prompts/vbench-official/
+
+# Interrupted video writes and local one-off summaries
+*.partial.mp4
+/wan_givens_summary.json
