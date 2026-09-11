@@ -12,6 +12,7 @@ import torch
 
 from src.utils.wan_utils import (
     build_wan_block_transforms,
+    build_wan_mixed_block_transforms,
     finalize_wan_transforms,
     get_wan_transform_stats,
     observe_wan_transforms,
@@ -45,6 +46,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--transform-group-size", type=int, default=32)
     parser.add_argument("--outlier-threshold", type=float, default=5.0)
+    parser.add_argument("--quant-scope", choices=("all", "attention", "ffn"), default="all")
+    parser.add_argument(
+        "--attention-transform-class", choices=("identity", "hadamard", "givens")
+    )
+    parser.add_argument("--ffn-transform-class", choices=("identity", "hadamard", "givens"))
     parser.add_argument("--weight-bits", type=int, choices=(4, 16), default=4)
     parser.add_argument("--activation-bits", type=int, choices=(4, 16), default=4)
     parser.add_argument("--quant-group-size", type=int, default=32)
@@ -114,6 +120,11 @@ def video_metrics(reference: torch.Tensor, candidate: torch.Tensor) -> dict[str,
 def main() -> None:
     args = parse_args()
     validate_args(args)
+    mixed = args.attention_transform_class is not None or args.ffn_transform_class is not None
+    if mixed and (args.attention_transform_class is None or args.ffn_transform_class is None):
+        raise ValueError("Both mixed transform-class arguments are required")
+    if mixed and args.quant_scope != "all":
+        raise ValueError("Mixed transforms require quant-scope=all")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(args.wan_repo))
     from wan.configs import WAN_CONFIGS
@@ -128,22 +139,37 @@ def main() -> None:
         t5_cpu=True,
     )
 
-    transform_kwargs = (
-        {"outlier_threshold": args.outlier_threshold}
-        if args.transform_class == "givens"
-        else {}
-    )
-    block_transforms = build_wan_block_transforms(
-        pipe.model,
-        args.transform_class,
-        args.transform_group_size,
-        device,
-        **transform_kwargs,
+    if mixed:
+        block_transforms = build_wan_mixed_block_transforms(
+            pipe.model,
+            args.attention_transform_class,
+            args.ffn_transform_class,
+            args.transform_group_size,
+            device,
+            outlier_threshold=args.outlier_threshold,
+        )
+    else:
+        transform_kwargs = (
+            {"outlier_threshold": args.outlier_threshold}
+            if args.transform_class == "givens"
+            else {}
+        )
+        block_transforms = build_wan_block_transforms(
+            pipe.model,
+            args.transform_class,
+            args.transform_group_size,
+            device,
+            quant_scope=args.quant_scope,
+            **transform_kwargs,
+        )
+
+    has_givens = args.transform_class == "givens" if not mixed else (
+        args.attention_transform_class == "givens" or args.ffn_transform_class == "givens"
     )
 
     generated_reference = None
     reference_seconds = 0.0
-    if args.transform_class == "givens":
+    if has_givens:
         handles = observe_wan_transforms(pipe.model, block_transforms)
         try:
             # The BF16 pass observes every conditional/unconditional DiT call
@@ -198,7 +224,12 @@ def main() -> None:
     report.transform_stats = get_wan_transform_stats(block_transforms)
     quantized, quantized_seconds = generate(pipe, args)
 
-    method_name = f"{args.transform_class}_w{args.weight_bits}a{args.activation_bits}"
+    method_name = (
+        f"attn_{args.attention_transform_class}_ffn_{args.ffn_transform_class}"
+        f"_w{args.weight_bits}a{args.activation_bits}"
+        if mixed else
+        f"{args.transform_class}_w{args.weight_bits}a{args.activation_bits}_{args.quant_scope}"
+    )
     quantized_path = args.output_dir / f"{method_name}.mp4"
     cache_video(quantized[None], save_file=str(quantized_path), fps=args.fps)
 
@@ -212,6 +243,11 @@ def main() -> None:
         "transform": args.transform_class,
         "transform_group_size": args.transform_group_size,
         "outlier_threshold": args.outlier_threshold,
+        "quant_scope": args.quant_scope,
+        "attention_transform": (
+            args.attention_transform_class if mixed else args.transform_class
+        ),
+        "ffn_transform": args.ffn_transform_class if mixed else args.transform_class,
         "format": "mxfp",
         "weight_bits": args.weight_bits,
         "activation_bits": args.activation_bits,

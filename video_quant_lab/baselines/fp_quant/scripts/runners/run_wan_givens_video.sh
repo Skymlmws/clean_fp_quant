@@ -26,6 +26,9 @@ SEED="${SEED:-0}"
 TRANSFORM_CLASS="${TRANSFORM_CLASS:-givens}"
 TRANSFORM_GROUP_SIZE="${TRANSFORM_GROUP_SIZE:-32}"
 OUTLIER_THRESHOLD="${OUTLIER_THRESHOLD:-5}"
+QUANT_SCOPE="${QUANT_SCOPE:-all}"
+ATTENTION_TRANSFORM_CLASS="${ATTENTION_TRANSFORM_CLASS:-}"
+FFN_TRANSFORM_CLASS="${FFN_TRANSFORM_CLASS:-}"
 WEIGHT_BITS="${WEIGHT_BITS:-4}"
 ACTIVATION_BITS="${ACTIVATION_BITS:-4}"
 QUANT_GROUP_SIZE="${QUANT_GROUP_SIZE:-32}"
@@ -33,7 +36,7 @@ WEIGHT_OBSERVER="${WEIGHT_OBSERVER:-minmax}"
 REFERENCE_TENSOR="${REFERENCE_TENSOR:-}"
 REFERENCE_ONLY="${REFERENCE_ONLY:-0}"
 
-RUN_NAME="${RUN_NAME:-wan1.3b-${TRANSFORM_CLASS}-mxfp4-w${WEIGHT_BITS}a${ACTIVATION_BITS}-${WIDTH}x${HEIGHT}-${FRAMES}f-${STEPS}steps-seed${SEED}}"
+RUN_NAME="${RUN_NAME:-wan1.3b-${TRANSFORM_CLASS}-mxfp4-w${WEIGHT_BITS}a${ACTIVATION_BITS}-${QUANT_SCOPE}-${WIDTH}x${HEIGHT}-${FRAMES}f-${STEPS}steps-seed${SEED}}"
 OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/video-quantization-runs/${RUN_NAME}}"
 
 if [[ ! -x "${PYTHON}" ]]; then
@@ -59,6 +62,12 @@ fi
 if [[ "${REFERENCE_ONLY}" == "1" ]]; then
     REFERENCE_ARGS+=(--reference-only)
 fi
+if [[ -n "${ATTENTION_TRANSFORM_CLASS}" ]]; then
+    REFERENCE_ARGS+=(--attention-transform-class "${ATTENTION_TRANSFORM_CLASS}")
+fi
+if [[ -n "${FFN_TRANSFORM_CLASS}" ]]; then
+    REFERENCE_ARGS+=(--ffn-transform-class "${FFN_TRANSFORM_CLASS}")
+fi
 
 echo "Running Wan2.1 ${TRANSFORM_CLASS} + MXFP quantization video generation"
 echo "GPU: cuda:${DEVICE_ID}"
@@ -81,6 +90,7 @@ echo "Output: ${OUTPUT_DIR}"
     --transform-class "${TRANSFORM_CLASS}" \
     --transform-group-size "${TRANSFORM_GROUP_SIZE}" \
     --outlier-threshold "${OUTLIER_THRESHOLD}" \
+    --quant-scope "${QUANT_SCOPE}" \
     --weight-bits "${WEIGHT_BITS}" \
     --activation-bits "${ACTIVATION_BITS}" \
     --quant-group-size "${QUANT_GROUP_SIZE}" \

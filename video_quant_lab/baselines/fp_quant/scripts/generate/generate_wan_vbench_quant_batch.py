@@ -21,6 +21,7 @@ from scripts.generate.generate_wan_vbench_batch import (
 )
 from src.utils.wan_utils import (
     build_wan_block_transforms,
+    build_wan_mixed_block_transforms,
     finalize_wan_transforms,
     get_wan_transform_stats,
     observe_wan_transforms,
@@ -49,6 +50,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--transform-group-size", type=int, default=32)
     parser.add_argument("--transform-randomize", action="store_true")
     parser.add_argument("--transform-seed", type=int, default=0)
+    parser.add_argument("--quant-scope", choices=("all", "attention", "ffn"), default="all")
+    parser.add_argument(
+        "--attention-transform-class", choices=("identity", "hadamard", "givens")
+    )
+    parser.add_argument("--ffn-transform-class", choices=("identity", "hadamard", "givens"))
     parser.add_argument("--outlier-threshold", type=float, default=5.0)
     parser.add_argument("--quant-group-size", type=int, default=32)
     parser.add_argument("--weight-bits", type=int, choices=(4, 16), default=4)
@@ -87,6 +93,11 @@ def main() -> None:
         raise ValueError("transform-group-size must be a power of two greater than one")
     if args.transform_randomize and args.transform_class != "hadamard":
         raise ValueError("transform-randomize is supported only with transform-class=hadamard")
+    mixed = args.attention_transform_class is not None or args.ffn_transform_class is not None
+    if mixed and (args.attention_transform_class is None or args.ffn_transform_class is None):
+        raise ValueError("Both mixed transform-class arguments are required")
+    if mixed and args.quant_scope != "all":
+        raise ValueError("Mixed transforms require quant-scope=all")
 
     selected = select_stratified(
         load_records(args.metadata, args.augmented_prompts),
@@ -109,19 +120,40 @@ def main() -> None:
     rank_tasks = [task for task in tasks if task["task_index"] % args.world_size == args.rank]
     assigned = rank_tasks[args.worker_index::args.worker_count]
     calibration = selected[args.calibration_prompt_index]
-    method = f"{args.transform_class}-mxfp4-w{args.weight_bits}a{args.activation_bits}"
+    scope_suffix = "" if args.quant_scope == "all" else f"-{args.quant_scope}"
+    method = (
+        f"attn-{args.attention_transform_class}-ffn-{args.ffn_transform_class}"
+        f"-mxfp4-w{args.weight_bits}a{args.activation_bits}"
+        if mixed else
+        f"{args.transform_class}-mxfp4-w{args.weight_bits}a{args.activation_bits}{scope_suffix}"
+    )
     quantization = {
         "transform": args.transform_class,
         "transform_group_size": args.transform_group_size,
         "transform_randomize": args.transform_randomize,
         "transform_seed": args.transform_seed,
+        "scope": args.quant_scope,
+        "attention_transform": (
+            args.attention_transform_class if mixed else args.transform_class
+        ),
+        "ffn_transform": args.ffn_transform_class if mixed else args.transform_class,
         "format": "mxfp",
         "weight_bits": args.weight_bits,
         "activation_bits": args.activation_bits,
         "quant_group_size": args.quant_group_size,
         "weight_observer": args.weight_observer,
     }
+    has_givens = args.transform_class == "givens" if not mixed else (
+        args.attention_transform_class == "givens" or args.ffn_transform_class == "givens"
+    )
     if args.transform_class == "givens":
+        quantization.update({
+            "outlier_threshold": args.outlier_threshold,
+            "calibration_prompt_index": args.calibration_prompt_index,
+            "calibration_source_index": calibration["source_index"],
+            "calibration_prompt": calibration["prompt"],
+        })
+    elif has_givens:
         quantization.update({
             "outlier_threshold": args.outlier_threshold,
             "calibration_prompt_index": args.calibration_prompt_index,
@@ -168,15 +200,32 @@ def main() -> None:
         config=WAN_CONFIGS["t2v-1.3B"], checkpoint_dir=str(args.checkpoint),
         device_id=args.device_id, t5_cpu=True,
     )
-    transform_kwargs = {}
-    if args.transform_class == "givens":
-        transform_kwargs["outlier_threshold"] = args.outlier_threshold
-    elif args.transform_class == "hadamard":
-        transform_kwargs.update(randomize=args.transform_randomize, seed=args.transform_seed)
-    block_transforms = build_wan_block_transforms(
-        pipe.model, args.transform_class, args.transform_group_size, device, **transform_kwargs
-    )
-    if args.transform_class == "givens":
+    if mixed:
+        block_transforms = build_wan_mixed_block_transforms(
+            pipe.model,
+            args.attention_transform_class,
+            args.ffn_transform_class,
+            args.transform_group_size,
+            device,
+            outlier_threshold=args.outlier_threshold,
+            hadamard_randomize=args.transform_randomize,
+            seed=args.transform_seed,
+        )
+    else:
+        transform_kwargs = {}
+        if args.transform_class == "givens":
+            transform_kwargs["outlier_threshold"] = args.outlier_threshold
+        elif args.transform_class == "hadamard":
+            transform_kwargs.update(randomize=args.transform_randomize, seed=args.transform_seed)
+        block_transforms = build_wan_block_transforms(
+            pipe.model,
+            args.transform_class,
+            args.transform_group_size,
+            device,
+            quant_scope=args.quant_scope,
+            **transform_kwargs,
+        )
+    if has_givens:
         handles = observe_wan_transforms(pipe.model, block_transforms)
         try:
             calibration_video = generate(pipe, calibration["augmented_prompt"], args.sample_seeds[0])
@@ -206,7 +255,7 @@ def main() -> None:
     )
     plan["quantization"]["replaced_linears"] = report.replaced_count
     plan["quantization"]["skipped"] = report.skipped
-    if args.transform_class == "givens":
+    if has_givens:
         plan["quantization"]["transform_stats"] = get_wan_transform_stats(block_transforms)
     write_json(args.output_dir / f"plan-rank{args.rank}{worker_suffix}.json", plan)
 

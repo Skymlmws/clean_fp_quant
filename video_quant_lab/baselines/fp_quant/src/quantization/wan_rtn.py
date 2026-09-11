@@ -12,6 +12,7 @@ from ..utils.common_utils import to
 from ..utils.wan_utils import (
     WanQuantizationReport,
     build_wan_block_transforms,
+    build_wan_mixed_block_transforms,
     finalize_wan_transforms,
     get_wan_transform_stats,
     observe_wan_transforms,
@@ -53,6 +54,9 @@ def wan_rtn_quantization(
     transform_group_size: int = 32,
     transform_randomize: bool = False,
     transform_seed: int = 0,
+    quant_scope: str = "all",
+    attention_transform_class: str | None = None,
+    ffn_transform_class: str | None = None,
     outlier_threshold: float = 50.0,
     weight_bits: int = 4,
     activation_bits: int = 16,
@@ -71,20 +75,41 @@ def wan_rtn_quantization(
     This is a fake-quant path: transformed weights are quantized/dequantized once,
     while activations are dynamically fake-quantized on each forward when requested.
     """
-    transform_kwargs = {}
-    if transform_class == "givens":
-        transform_kwargs["outlier_threshold"] = outlier_threshold
-    elif transform_class == "hadamard":
-        transform_kwargs.update(randomize=transform_randomize, seed=transform_seed)
-    block_transforms = build_wan_block_transforms(
-        model,
-        transform_class,
-        transform_group_size,
-        device,
-        **transform_kwargs,
-    )
+    mixed = attention_transform_class is not None or ffn_transform_class is not None
+    if mixed:
+        if quant_scope != "all":
+            raise ValueError("Mixed Attention/FFN transforms require quant_scope='all'")
+        if attention_transform_class is None or ffn_transform_class is None:
+            raise ValueError("Both attention_transform_class and ffn_transform_class are required")
+        block_transforms = build_wan_mixed_block_transforms(
+            model,
+            attention_transform_class,
+            ffn_transform_class,
+            transform_group_size,
+            device,
+            outlier_threshold=outlier_threshold,
+            hadamard_randomize=transform_randomize,
+            seed=transform_seed,
+        )
+    else:
+        transform_kwargs = {}
+        if transform_class == "givens":
+            transform_kwargs["outlier_threshold"] = outlier_threshold
+        elif transform_class == "hadamard":
+            transform_kwargs.update(randomize=transform_randomize, seed=transform_seed)
+        block_transforms = build_wan_block_transforms(
+            model,
+            transform_class,
+            transform_group_size,
+            device,
+            quant_scope=quant_scope,
+            **transform_kwargs,
+        )
 
-    if transform_class == "givens":
+    has_givens = transform_class == "givens" if not mixed else (
+        attention_transform_class == "givens" or ffn_transform_class == "givens"
+    )
+    if has_givens:
         handles = observe_wan_transforms(model, block_transforms)
         sample_count = 0
         try:
@@ -121,6 +146,6 @@ def wan_rtn_quantization(
         weight_quantizer_kwargs,
         activation_quantizer_kwargs,
     )
-    if transform_class == "givens":
+    if has_givens:
         report.transform_stats = get_wan_transform_stats(block_transforms)
     return report

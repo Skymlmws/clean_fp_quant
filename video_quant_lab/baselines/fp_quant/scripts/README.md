@@ -39,6 +39,15 @@ records the transform seed in the run plan.
 `identity_w4a4`, `identity_w4a16`, and `hadamard_w4a16` launchers are thin,
 named configurations over it. Set `DEVICE_ID`, `RANK`, and `WORLD_SIZE` to
 shard a matched run; set `DRY_RUN=1` to inspect its plan without loading Wan.
+Set `QUANT_SCOPE=attention` to quantize only the self- and cross-attention
+Q/K/V/O projections, or `QUANT_SCOPE=ffn` to quantize only `ffn.0` and
+`ffn.2`. The default `QUANT_SCOPE=all` preserves the existing behavior and
+experiment IDs. For example:
+
+```shell
+QUANT_SCOPE=attention TRANSFORM_CLASS=givens WEIGHT_BITS=4 ACTIVATION_BITS=4 \
+  ./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_vbench_mxfp.sh
+```
 
 `runners/run_wan_vbench_givens_w4a4_finalize.sh` waits for all 32 generated
 videos, evaluates the same VBench dimensions in three GPU shards, and writes a

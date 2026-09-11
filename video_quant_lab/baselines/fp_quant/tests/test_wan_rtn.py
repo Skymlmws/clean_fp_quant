@@ -158,3 +158,113 @@ def test_wan_rtn_mxfp_baseline_quantizer_selection(
         (linear.activation_quantizer is not None) == expect_activation_quantizer
         for linear in linears
     )
+
+
+@pytest.mark.parametrize(
+    ("quant_scope", "expected_count", "quantized_prefixes"),
+    [
+        ("all", 10, ("self_attn", "cross_attn", "ffn")),
+        ("attention", 8, ("self_attn", "cross_attn")),
+        ("ffn", 2, ("ffn",)),
+    ],
+)
+def test_wan_rtn_quantization_scope(quant_scope, expected_count, quantized_prefixes):
+    model = ToyWanModel().eval()
+    report = wan_rtn_quantization(
+        model,
+        [],
+        torch.device("cpu"),
+        transform_class="identity",
+        transform_group_size=4,
+        quant_scope=quant_scope,
+        weight_bits=4,
+        activation_bits=4,
+        weight_group_size=4,
+        activation_group_size=4,
+    )
+
+    assert report.replaced_count == expected_count
+    block = model.blocks[0]
+    for prefix in ("self_attn", "cross_attn"):
+        module = getattr(block, prefix)
+        for name in ("q", "k", "v", "o"):
+            expected = prefix in quantized_prefixes
+            assert isinstance(getattr(module, name), WanRTNLinear) == expected
+    for index in (0, 2):
+        assert isinstance(block.ffn[index], WanRTNLinear) == ("ffn" in quantized_prefixes)
+
+
+def test_wan_rtn_rejects_unknown_quantization_scope():
+    with pytest.raises(ValueError, match="Unknown Wan quantization scope"):
+        wan_rtn_quantization(
+            ToyWanModel(),
+            [],
+            torch.device("cpu"),
+            transform_class="identity",
+            transform_group_size=4,
+            quant_scope="unknown",
+            weight_bits=16,
+            activation_bits=16,
+        )
+
+
+def test_hadamard_transform_is_stable_across_quantization_scopes():
+    torch.manual_seed(3)
+    all_model = ToyWanModel().eval()
+    ffn_model = ToyWanModel().eval()
+    ffn_model.load_state_dict(all_model.state_dict())
+
+    for model, scope in ((all_model, "all"), (ffn_model, "ffn")):
+        wan_rtn_quantization(
+            model,
+            [],
+            torch.device("cpu"),
+            transform_class="hadamard",
+            transform_group_size=4,
+            transform_randomize=True,
+            transform_seed=17,
+            quant_scope=scope,
+            weight_bits=16,
+            activation_bits=16,
+        )
+
+    torch.testing.assert_close(
+        all_model.blocks[0].ffn[0].input_transform.signs,
+        ffn_model.blocks[0].ffn[0].input_transform.signs,
+    )
+    torch.testing.assert_close(
+        all_model.blocks[0].ffn[2].input_transform.signs,
+        ffn_model.blocks[0].ffn[2].input_transform.signs,
+    )
+
+
+@pytest.mark.parametrize(
+    ("attention_transform", "ffn_transform"),
+    [("givens", "identity"), ("identity", "givens")],
+)
+def test_wan_rtn_supports_mixed_attention_and_ffn_transforms(
+    attention_transform, ffn_transform
+):
+    model = ToyWanModel().eval()
+    x = torch.randn(2, 4, 8)
+    context = torch.randn(2, 4, 8)
+    report = wan_rtn_quantization(
+        model,
+        [((x, context), {})],
+        torch.device("cpu"),
+        transform_group_size=4,
+        attention_transform_class=attention_transform,
+        ffn_transform_class=ffn_transform,
+        outlier_threshold=20,
+        weight_bits=4,
+        activation_bits=4,
+        weight_group_size=4,
+        activation_group_size=4,
+    )
+
+    assert report.replaced_count == 10
+    block = model.blocks[0]
+    assert type(block.self_attn.q.input_transform).__name__.lower().startswith(
+        attention_transform
+    )
+    assert type(block.ffn[0].input_transform).__name__.lower().startswith(ffn_transform)

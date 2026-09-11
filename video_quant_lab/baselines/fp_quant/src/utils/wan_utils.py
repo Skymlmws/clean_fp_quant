@@ -23,6 +23,14 @@ WAN_LINEAR_TRANSFORM_GROUPS = {
     "ffn_out": ("ffn.2",),
 }
 
+WAN_QUANT_SCOPES = {
+    "all": tuple(WAN_LINEAR_TRANSFORM_GROUPS),
+    "attention": tuple(
+        name for name in WAN_LINEAR_TRANSFORM_GROUPS if not name.startswith("ffn_")
+    ),
+    "ffn": tuple(name for name in WAN_LINEAR_TRANSFORM_GROUPS if name.startswith("ffn_")),
+}
+
 
 @dataclass
 class WanBlockTransforms:
@@ -33,6 +41,7 @@ class WanBlockTransforms:
         self.linears = {
             linear_name: self.transforms[group_name]
             for group_name, linear_names in WAN_LINEAR_TRANSFORM_GROUPS.items()
+            if group_name in self.transforms
             for linear_name in linear_names
         }
 
@@ -115,20 +124,29 @@ def build_wan_block_transforms(
     transform_class: str,
     group_size: int,
     device: torch.device,
+    quant_scope: str = "all",
     **transform_kwargs: Any,
 ) -> list[WanBlockTransforms]:
     if not hasattr(model, "blocks") or not hasattr(model, "dim") or not hasattr(model, "ffn_dim"):
         raise ValueError("Expected a WanModel-like module with blocks, dim, and ffn_dim")
+    if quant_scope not in WAN_QUANT_SCOPES:
+        choices = ", ".join(WAN_QUANT_SCOPES)
+        raise ValueError(f"Unknown Wan quantization scope {quant_scope!r}; expected one of: {choices}")
 
     result = []
     base_seed = transform_kwargs.pop("seed", None)
+    selected_groups = set(WAN_QUANT_SCOPES[quant_scope])
     for block_idx, _ in enumerate(model.blocks):
         transforms = {}
         for transform_idx, name in enumerate(WAN_LINEAR_TRANSFORM_GROUPS):
+            if name not in selected_groups:
+                continue
             size = model.ffn_dim if name == "ffn_out" else model.dim
             current_kwargs = dict(transform_kwargs)
             if base_seed is not None:
-                current_kwargs["seed"] = base_seed + block_idx * len(WAN_LINEAR_TRANSFORM_GROUPS) + transform_idx
+                current_kwargs["seed"] = (
+                    base_seed + block_idx * len(WAN_LINEAR_TRANSFORM_GROUPS) + transform_idx
+                )
             transforms[name] = build_transform(
                 transform_class,
                 size=size,
@@ -138,6 +156,44 @@ def build_wan_block_transforms(
             )
         result.append(WanBlockTransforms(transforms))
     return result
+
+
+def build_wan_mixed_block_transforms(
+    model: nn.Module,
+    attention_transform_class: str,
+    ffn_transform_class: str,
+    group_size: int,
+    device: torch.device,
+    *,
+    outlier_threshold: float = 50.0,
+    hadamard_randomize: bool = False,
+    seed: int = 0,
+) -> list[WanBlockTransforms]:
+    """Build independently selected transforms for Attention and FFN linears."""
+    per_scope = []
+    for scope, transform_class in (
+        ("attention", attention_transform_class),
+        ("ffn", ffn_transform_class),
+    ):
+        kwargs: dict[str, Any] = {}
+        if transform_class == "givens":
+            kwargs["outlier_threshold"] = outlier_threshold
+        elif transform_class == "hadamard":
+            kwargs.update(randomize=hadamard_randomize, seed=seed)
+        per_scope.append(
+            build_wan_block_transforms(
+                model,
+                transform_class,
+                group_size,
+                device,
+                quant_scope=scope,
+                **kwargs,
+            )
+        )
+    return [
+        WanBlockTransforms({**attention.transforms, **ffn.transforms})
+        for attention, ffn in zip(*per_scope)
+    ]
 
 
 def observe_wan_transforms(
