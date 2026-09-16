@@ -22,5 +22,10 @@ Each manifest records:
 - the upstream command to execute;
 - how the harness passes its assigned artifact directory.
 
+Currently integrated baselines:
+
+- `fp_quant`: FP-Quant with the local Wan2.1 extensions.
+- `qvgen`: the official QVGen Wan2.1-T2V-1.3B W4A4 implementation.
+
 The manifest records the upstream URL and base revision when applicable, and
 every run records the main repository commit containing the baseline code.

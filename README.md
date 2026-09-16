@@ -18,6 +18,10 @@ baselines, collecting outputs, and applying shared analysis and evaluation.
 FP-Quant, including the local Wan2.1 and Givens extensions, lives entirely in
 `video_quant_lab/baselines/fp_quant/`.
 
+QVGen's Wan2.1-T2V-1.3B W4A4 baseline lives in
+`video_quant_lab/baselines/qvgen/`; see its README for model paths and launch
+instructions.
+
 ## FP-Quant Wan smoke runs
 
 From the project root:

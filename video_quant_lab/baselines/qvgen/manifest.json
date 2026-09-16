@@ -1,0 +1,23 @@
+{
+  "name": "qvgen",
+  "source": {
+    "url": "https://github.com/ModelTC/QVGen.git",
+    "revision": "198e761f770fa0728e21da5e76b8198e41cbaf3b"
+  },
+  "repository": {
+    "env": "QVGEN_REPO",
+    "default": "video_quant_lab/baselines/qvgen"
+  },
+  "python": {
+    "env": "QVGEN_PYTHON",
+    "default": "video_quant_lab/baselines/qvgen/.venv/bin/python"
+  },
+  "command": [
+    "{python}",
+    "inference/wan.py"
+  ],
+  "output_arguments": [
+    "--output_path",
+    "{artifact_dir}/sample.mp4"
+  ]
+}

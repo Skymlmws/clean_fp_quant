@@ -110,3 +110,29 @@ def test_run_name_allows_repeated_trials(tmp_path):
     plan = build_plan(experiment, manifest, tmp_path, run_name="trial-seed-7")
 
     assert plan.run_dir == (tmp_path / "trial-seed-7").resolve()
+
+
+def test_qvgen_smoke_plan_uses_pinned_local_baseline(tmp_path, monkeypatch):
+    project_root = Path(__file__).resolve().parents[2]
+    manifest = BaselineManifest.load(
+        project_root / "video_quant_lab/baselines/qvgen/manifest.json"
+    )
+    experiment = Experiment.load(
+        project_root
+        / "video_quant_lab/experiments/qvgen_wan1_3b_w4a4_smoke.json"
+    )
+    monkeypatch.setenv("QVGEN_MODEL_PATH", "/models/wan")
+    monkeypatch.setenv("QVGEN_QUANT_MODEL_PATH", "/models/qvgen")
+
+    plan = build_plan(experiment, manifest, tmp_path)
+
+    assert plan.repository == (
+        project_root / "video_quant_lab/baselines/qvgen"
+    ).resolve()
+    assert plan.command[1] == "inference/wan.py"
+    assert plan.command[-2:] == (
+        "--output_path",
+        str(plan.artifact_dir / "sample.mp4"),
+    )
+    assert "/models/wan" in plan.command
+    assert "/models/qvgen" in plan.command
