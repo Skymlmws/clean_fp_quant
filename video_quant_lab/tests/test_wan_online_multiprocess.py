@@ -108,3 +108,53 @@ def test_multiprocess_renderer_writes_reference_surface(tmp_path):
     assert metadata["records"][0]["renders"]["surface"]["coordinate_range"] == {
         "channel": [0, 3], "token": [0, 0]
     }
+
+
+def test_renderer_writes_paired_variant_metadata_and_fixed_color_scale(tmp_path):
+    args = Namespace(
+        output_dir=tmp_path,
+        max_output_gb=0.0,
+        render_mode="sync",
+        render_workers=1,
+        shared_memory_dir=tmp_path,
+        max_inflight_activations=1,
+        inflight_memory_fraction=0.25,
+        width=16,
+        height=16,
+        frames=5,
+        channel_rms_ratio=5.0,
+        mark_top_channels=0,
+        isolated_global_percentile=99.99,
+        isolated_channel_percentile=99.0,
+        isolated_ratio=5.0,
+        isolated_max_token_fraction=0.01,
+        mark_top_isolated=0,
+        isolated_merge_token_gap=1,
+        ffn_out_group_size=2,
+        image_width=480,
+        image_height=360,
+        heatmap_percentile=100.0,
+        heatmap_gamma=1.0,
+        plot_kind="heatmap",
+    )
+    renderer = WanOnlineActivationRenderer(nn.Module(), args, [], [], [0])
+    renderer.call_index = 0
+    renderer._submit(
+        torch.arange(8).reshape(1, 2, 4),
+        1,
+        "cross_q",
+        "cross_attn.q",
+        variant="hadamard-h32",
+        color_max_override=25.0,
+        extra_metadata={"mxfp4": {"mse": 0.125}},
+    )
+    renderer.finish()
+
+    root = (
+        tmp_path / "step_000" / "conditional" / "block_01" / "cross_q"
+        / "hadamard-h32"
+    )
+    metadata = json.loads((root / "metadata.json").read_text())
+    assert metadata["variant"] == "hadamard-h32"
+    assert metadata["mxfp4"]["mse"] == 0.125
+    assert metadata["records"][0]["renders"]["heatmap"]["heatmap_color_max"] == 25.0

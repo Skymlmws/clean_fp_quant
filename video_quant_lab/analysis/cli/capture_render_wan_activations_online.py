@@ -68,6 +68,9 @@ class RenderJob:
     block: int
     site: str
     linear: str
+    variant: str | None = None
+    color_max_override: float | None = None
+    extra_metadata: dict[str, Any] | None = None
     shared_memory_path: str | None = None
 
 
@@ -262,11 +265,14 @@ class WanOnlineActivationRenderer:
                 "token_mask": [True] * effective + [False] * (padded - effective),
             }
 
-    def _destination(self, call_index: int, block: int, site: str) -> Path:
-        return (
+    def _destination(
+        self, call_index: int, block: int, site: str, variant: str | None = None
+    ) -> Path:
+        destination = (
             self.args.output_dir / f"step_{call_index // 2:03d}"
             / branch_for_call(call_index) / f"block_{block:02d}" / site
         )
+        return destination / variant if variant is not None else destination
 
     def _is_complete(self, destination: Path) -> bool:
         metadata_path = destination / "metadata.json"
@@ -307,9 +313,19 @@ class WanOnlineActivationRenderer:
                     self._inflight.release()
                 self._queue.task_done()
 
-    def _submit(self, value: torch.Tensor, block: int, site: str, linear: str) -> None:
+    def _submit(
+        self,
+        value: torch.Tensor,
+        block: int,
+        site: str,
+        linear: str,
+        *,
+        variant: str | None = None,
+        color_max_override: float | None = None,
+        extra_metadata: dict[str, Any] | None = None,
+    ) -> None:
         call_index = self.call_index
-        destination = self._destination(call_index, block, site)
+        destination = self._destination(call_index, block, site, variant)
         if self._is_complete(destination):
             self.skipped_activations += 1
             return
@@ -339,6 +355,9 @@ class WanOnlineActivationRenderer:
                     block=block,
                     site=site,
                     linear=linear,
+                    variant=variant,
+                    color_max_override=color_max_override,
+                    extra_metadata=extra_metadata,
                     shared_memory_path=str(shared_memory_path),
                 )
                 assert self._executor is not None
@@ -367,6 +386,9 @@ class WanOnlineActivationRenderer:
                     block=block,
                     site=site,
                     linear=linear,
+                    variant=variant,
+                    color_max_override=color_max_override,
+                    extra_metadata=extra_metadata,
                 )
                 self._queue.put(job)
             except BaseException:
@@ -382,6 +404,9 @@ class WanOnlineActivationRenderer:
                 block=block,
                 site=site,
                 linear=linear,
+                variant=variant,
+                color_max_override=color_max_override,
+                extra_metadata=extra_metadata,
             ))
 
     def _process_done(self, future: Future, shared_memory_path: Path | None = None) -> None:
@@ -401,7 +426,9 @@ class WanOnlineActivationRenderer:
             self._inflight.release()
 
     def _render_job(self, job: RenderJob) -> None:
-        destination = self._destination(job.call_index, job.block, job.site)
+        destination = self._destination(
+            job.call_index, job.block, job.site, job.variant
+        )
         self._check_limit()
         destination.mkdir(parents=True, exist_ok=True)
         if job.activation is None:
@@ -490,6 +517,8 @@ class WanOnlineActivationRenderer:
                 f"Wan {job.site} | step {job.call_index // 2} | "
                 f"block {job.block} | {frame_text}"
             )
+            if job.variant is not None:
+                title += f" | {job.variant}"
             renders: dict[str, dict[str, Any]] = {}
             if self.args.plot_kind in ("heatmap", "both"):
                 filename = "heatmap.png" if frame is None else f"frame_{frame:03d}.png"
@@ -507,6 +536,7 @@ class WanOnlineActivationRenderer:
                     self.args.heatmap_gamma,
                     use_bin_edges=True,
                     annotation_text=annotation,
+                    color_max_override=job.color_max_override,
                     marked_channels=[int(record["channel"]) for record in outliers] if marker_labels is None else None,
                     channel_marker_labels=marker_labels,
                     marked_points=marked_points,
@@ -550,6 +580,7 @@ class WanOnlineActivationRenderer:
             "block": job.block,
             "site": job.site,
             "linear": job.linear,
+            "variant": job.variant,
             "source_shape": job.source_shape,
             "text_context": job.text_context,
             "activation_stored": False,
@@ -559,6 +590,8 @@ class WanOnlineActivationRenderer:
             "image_files": image_files,
             "complete": True,
         }
+        if job.extra_metadata:
+            metadata.update(job.extra_metadata)
         (destination / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
         self.rendered_activations += 1
 

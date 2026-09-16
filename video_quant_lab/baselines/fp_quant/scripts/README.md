@@ -71,6 +71,25 @@ randomized Hadamard H32 W16A4, and Givens W4A16.
 ./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_baseline_pipeline.sh stop
 ```
 
+`runners/run_wan_cross_q_transform_comparison.sh` runs the paired activation
+experiment for persistent `cross_q` channel outliers. It first calibrates the
+Givens transforms with one BF16 generation, then derives Identity, randomized
+signed H32, and calibrated Givens G32 activations from the exact same BF16
+inputs. Corresponding heatmaps share a color maximum. Each variant's metadata
+also records MXFP4 E2M1/E8M0 fake-quantization MSE, SQNR, maximum error, and
+underflow fraction. The default reproduces the existing autumn-station setup at
+steps 10, 25, and 40 over all blocks:
+
+```shell
+DEVICE_ID=0 \
+  ./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_cross_q_transform_comparison.sh
+```
+
+Use `BLOCKS=1 SAMPLING_STEPS=10` for a small targeted run before launching the
+full matrix. The result root contains `config.json`, `state.json`, and the
+aggregate `comparison.json`; per-variant images and metadata are nested below
+each `cross_q` directory.
+
 GPU scheduling can be constrained with `GPU_ALLOWLIST`. The main controls are
 `SHARED_GPU_TARGET` (default 2), `MAX_GENERATION_WORKERS` (default 8),
 `GPU_MAX_USED_MIB` (default 1000), and `GPU_MAX_UTIL_PERCENT` (default 10).
