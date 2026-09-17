@@ -41,6 +41,7 @@ class WanActivationDiskCapture:
         sites: Iterable[str],
         call_indices: Iterable[int],
         batch_index: int = 0,
+        linear_sites: dict[str, tuple[str, ...]] | None = None,
     ) -> None:
         self.model = model
         self.output_dir = output_dir
@@ -50,6 +51,7 @@ class WanActivationDiskCapture:
         self.sites = list(sites)
         self.target_calls = set(call_indices)
         self.batch_index = batch_index
+        self.linear_sites = linear_sites or WAN_LINEAR_SITES
         self.call_index = -1
         self.timestep = float("nan")
         self.effective_text_token_count: int | None = None
@@ -155,7 +157,7 @@ class WanActivationDiskCapture:
         for block_index in self.blocks:
             modules = dict(self.model.blocks[block_index].named_modules())
             for site in self.sites:
-                linear_name = WAN_LINEAR_SITES[site][0]
+                linear_name = self.linear_sites[site][0]
                 module = modules.get(linear_name)
                 if not isinstance(module, nn.Linear):
                     raise ValueError(f"Expected Linear at blocks.{block_index}.{linear_name}")
