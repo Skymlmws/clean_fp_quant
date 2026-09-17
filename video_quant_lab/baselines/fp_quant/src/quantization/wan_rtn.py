@@ -94,7 +94,7 @@ def wan_rtn_quantization(
     else:
         transform_kwargs = {}
         if transform_class == "givens":
-            transform_kwargs["outlier_threshold"] = outlier_threshold
+            transform_kwargs.update(outlier_threshold=outlier_threshold, seed=transform_seed)
         elif transform_class == "hadamard":
             transform_kwargs.update(randomize=transform_randomize, seed=transform_seed)
         block_transforms = build_wan_block_transforms(

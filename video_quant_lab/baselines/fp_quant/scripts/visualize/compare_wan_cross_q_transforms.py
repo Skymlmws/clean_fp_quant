@@ -18,6 +18,7 @@ from src.utils.wan_utils import (
     finalize_wan_transforms,
     get_wan_transform_stats,
     observe_wan_transforms,
+    rotation_validation_metrics,
 )
 from video_quant_lab.analysis.cli.capture_render_wan_activations_online import (
     ONLINE_RENDER_SCHEMA_VERSION,
@@ -206,7 +207,7 @@ def main() -> None:
 
     givens = cross_q_only(build_wan_block_transforms(
         pipe.model, "givens", args.group_size, device, quant_scope="attention",
-        outlier_threshold=args.outlier_threshold,
+        outlier_threshold=args.outlier_threshold, seed=args.transform_seed,
     ))
     calibration_handles = observe_wan_transforms(pipe.model, givens)
     try:
@@ -232,7 +233,12 @@ def main() -> None:
         if not isinstance(module, nn.Linear):
             raise ValueError(f"Expected Linear at blocks.{block_index}.cross_attn.q")
 
-        def hook(_module: nn.Module, inputs: tuple[Any, ...], current_block: int = block_index) -> None:
+        def hook(
+            _module: nn.Module,
+            inputs: tuple[Any, ...],
+            current_block: int = block_index,
+            current_weight: torch.Tensor = module.weight,
+        ) -> None:
             if renderer.call_index not in renderer.target_calls:
                 return
             source = inputs[0]
@@ -240,6 +246,11 @@ def main() -> None:
                 "identity": source,
                 "hadamard-h32": hadamard[current_block].transforms["cross_q"](source),
                 "givens-g32": givens[current_block].transforms["cross_q"](source),
+            }
+            transforms = {
+                "identity": None,
+                "hadamard-h32": hadamard[current_block].transforms["cross_q"],
+                "givens-g32": givens[current_block].transforms["cross_q"],
             }
             shared_color_max = max(float(value.detach().abs().max()) for value in variants.values())
             for name, value in variants.items():
@@ -249,6 +260,10 @@ def main() -> None:
                     "full_statistics": full_statistics(value),
                     "mxfp4": mxfp4_metrics(value, quantizer),
                 }
+                if transforms[name] is not None:
+                    metadata["rotation_validation"] = rotation_validation_metrics(
+                        source, value, transforms[name], current_weight
+                    )
                 renderer._submit(
                     value, current_block, "cross_q", "cross_attn.q",
                     variant=name, color_max_override=shared_color_max,

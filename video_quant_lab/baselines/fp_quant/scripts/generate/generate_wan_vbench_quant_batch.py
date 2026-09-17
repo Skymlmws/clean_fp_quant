@@ -214,7 +214,10 @@ def main() -> None:
     else:
         transform_kwargs = {}
         if args.transform_class == "givens":
-            transform_kwargs["outlier_threshold"] = args.outlier_threshold
+            transform_kwargs.update(
+                outlier_threshold=args.outlier_threshold,
+                seed=args.transform_seed,
+            )
         elif args.transform_class == "hadamard":
             transform_kwargs.update(randomize=args.transform_randomize, seed=args.transform_seed)
         block_transforms = build_wan_block_transforms(

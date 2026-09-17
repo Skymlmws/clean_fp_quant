@@ -1,6 +1,6 @@
 import torch
 
-from src.transforms.transforms import GivensTransform, build_transform
+from src.transforms.transforms import GivensTransform, HadamardTransform, build_transform
 
 
 def test_givens_is_registered_and_uses_requested_group_size():
@@ -62,3 +62,22 @@ def test_givens_accumulates_multiple_observations():
     assert transform.mat is not None
     matrix = transform.to_matrix()
     torch.testing.assert_close(matrix @ matrix.T, torch.eye(8), atol=1e-5, rtol=1e-5)
+
+
+def test_givens_all_fallback_matches_randomized_hadamard_exactly():
+    torch.manual_seed(11)
+    x = torch.randn(3, 16)
+    givens = GivensTransform(
+        size=16,
+        group_size=8,
+        outlier_threshold=float("inf"),
+        fallback_randomize=True,
+        seed=7,
+    )
+    hadamard = HadamardTransform(group_size=8, randomize=True, seed=7)
+
+    transformed = givens(x)
+
+    assert givens.givens_blocks == 0
+    assert givens.hadamard_blocks == 2
+    torch.testing.assert_close(transformed, hadamard(x), atol=0, rtol=0)

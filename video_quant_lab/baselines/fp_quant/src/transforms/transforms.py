@@ -100,7 +100,7 @@ class HadamardTransform(BaseTransform):
                 f"Input size {x.shape[-1]} must be divisible by group_size {self.group_size}"
             )
         x_shape = x.shape
-        grouped = x.view(-1, self.group_size)
+        grouped = x.reshape(-1, self.group_size)
         # R = D H / sqrt(g). Applying the same orthogonal R to activations and
         # weight rows preserves Linear exactly: (x R) (W R)^T = x W^T.
         signs = self.signs.to(device=x.device, dtype=x.dtype)
@@ -108,7 +108,7 @@ class HadamardTransform(BaseTransform):
             grouped = grouped * signs
         if x.device.type == "cuda":
             transformed = hadamard_transform(grouped, scale=self.scale)
-            return transformed.view(x_shape)
+            return transformed.reshape(x_shape)
 
         matrix = torch.ones(1, 1, device=x.device, dtype=x.dtype)
         while matrix.shape[0] < self.group_size:
@@ -117,7 +117,7 @@ class HadamardTransform(BaseTransform):
                 dim=0,
             )
         transformed = grouped @ matrix.T * self.scale
-        return transformed.view(x_shape)
+        return transformed.reshape(x_shape)
     
     def remove_parametrizations(self) -> None:
         pass
@@ -138,6 +138,8 @@ class GivensTransform(BaseTransform):
         group_size: int = 32,
         n_iter: Optional[int] = None,
         outlier_threshold: float = 50.0,
+        fallback_randomize: bool = True,
+        seed: int = 0,
         device: torch.device = None,
         dtype: torch.dtype = None,
     ):
@@ -153,9 +155,17 @@ class GivensTransform(BaseTransform):
         self.group_size = group_size
         self.n_iter = group_size - 1 if n_iter is None else n_iter
         self.outlier_threshold = outlier_threshold
+        self.fallback_randomize = fallback_randomize
+        self.seed = seed
         self.matrix_device = device
         self.matrix_dtype = dtype
         self.register_buffer("mat", None)
+        self.register_buffer("givens_mask", None)
+        self.fallback_transform = HadamardTransform(
+            group_size=group_size,
+            randomize=fallback_randomize,
+            seed=seed,
+        )
         self._observed_vectors = None
         self._observed_maxima = None
         self.givens_blocks = 0
@@ -268,12 +278,16 @@ class GivensTransform(BaseTransform):
 
         matrix_device = self.matrix_device or x_flat.device
         block_mats = []
+        givens_mask = []
         self.givens_blocks = 0
         self.hadamard_blocks = 0
         self.observed_abs_max = x_flat.abs().max().item()
         for start in range(0, full_size, self.group_size):
             group = x_flat[:, start:start + self.group_size]
             block = self._hadamard_matrix(self.group_size, matrix_device)
+            if self.fallback_randomize:
+                signs = self.fallback_transform.signs.to(matrix_device)
+                block = signs[:, None] * block
             flat_index = group.abs().argmax()
             row = torch.div(flat_index, self.group_size, rounding_mode="floor").item()
             current_col = (flat_index % self.group_size).item()
@@ -281,6 +295,7 @@ class GivensTransform(BaseTransform):
 
             if vector[current_col].abs() > self.outlier_threshold:
                 self.givens_blocks += 1
+                givens_mask.append(True)
                 block = torch.eye(self.group_size, device=matrix_device, dtype=torch.float32)
                 group_max = torch.exp2(torch.floor(torch.log2(vector[current_col].abs())) - 1)
 
@@ -316,11 +331,13 @@ class GivensTransform(BaseTransform):
                     current_col = other_col
             else:
                 self.hadamard_blocks += 1
+                givens_mask.append(False)
 
             block_mats.append(block)
 
         dtype = self.matrix_dtype or x_flat.dtype
         self.mat = torch.stack(block_mats).to(device=matrix_device, dtype=dtype)
+        self.givens_mask = torch.tensor(givens_mask, device=matrix_device, dtype=torch.bool)
 
     def to_matrix(self) -> torch.Tensor:
         """Materialize the full block-diagonal matrix (intended for tests/export)."""
@@ -342,7 +359,17 @@ class GivensTransform(BaseTransform):
                 f"Expected {matrices.shape[0] * self.group_size} channels, got {moved.shape[-1]}"
             )
         grouped = moved.unflatten(-1, (matrices.shape[0], self.group_size))
-        transformed = torch.einsum("...gi,gij->...gj", grouped, matrices).flatten(-2)
+        if not self.givens_mask.any():
+            return self.fallback_transform(moved).movedim(-1, dim)
+        transformed_groups = torch.einsum("...gi,gij->...gj", grouped, matrices)
+        if not self.givens_mask.all():
+            fallback_groups = self.fallback_transform(moved).unflatten(
+                -1, (matrices.shape[0], self.group_size)
+            )
+            mask_shape = (1,) * (transformed_groups.ndim - 2) + (-1, 1)
+            mask = self.givens_mask.to(x.device).view(mask_shape)
+            transformed_groups = torch.where(mask, transformed_groups, fallback_groups)
+        transformed = transformed_groups.flatten(-2)
         return transformed.movedim(-1, dim)
 
     def remove_parametrizations(self) -> None:

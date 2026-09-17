@@ -150,7 +150,7 @@ def main() -> None:
         )
     else:
         transform_kwargs = (
-            {"outlier_threshold": args.outlier_threshold}
+            {"outlier_threshold": args.outlier_threshold, "seed": args.transform_seed}
             if args.transform_class == "givens"
             else {}
         )

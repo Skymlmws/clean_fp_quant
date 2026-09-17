@@ -119,6 +119,52 @@ class WanRTNLinear(nn.Linear):
         return F.linear(x, self.weight, self.bias)
 
 
+@torch.no_grad()
+def rotation_validation_metrics(
+    source: torch.Tensor,
+    transformed: torch.Tensor,
+    transform: nn.Module,
+    weight: torch.Tensor,
+    *,
+    maximum_tokens: int = 256,
+    maximum_outputs: int = 128,
+) -> dict[str, float | int]:
+    """Measure norm preservation and Linear equivalence for a fixed rotation."""
+    source_flat = source.detach().reshape(-1, source.shape[-1])
+    transformed_flat = transformed.detach().reshape(-1, transformed.shape[-1])
+    source_norm = source_flat.float().norm(dim=-1)
+    transformed_norm = transformed_flat.float().norm(dim=-1)
+    norm_error = (transformed_norm - source_norm).abs()
+    relative_norm_error = norm_error / source_norm.clamp_min(1e-12)
+
+    stride = max(1, (source_flat.shape[0] + maximum_tokens - 1) // maximum_tokens)
+    sampled_source = source_flat[::stride][:maximum_tokens]
+    sampled_transformed = transformed_flat[::stride][:maximum_tokens]
+    sampled_weight = weight.detach()[:maximum_outputs]
+    transformed_weight = transform(sampled_weight, inv_t=True)
+    reference_output = F.linear(sampled_source, sampled_weight).float()
+    transformed_output = F.linear(sampled_transformed, transformed_weight).float()
+    output_error = transformed_output - reference_output
+    reference_energy = reference_output.square().sum().double()
+    error_energy = output_error.square().sum().double()
+
+    return {
+        "token_count": source_flat.shape[0],
+        "sampled_token_count": sampled_source.shape[0],
+        "sampled_output_count": sampled_weight.shape[0],
+        "max_token_l2_abs_error": float(norm_error.max()),
+        "mean_token_l2_abs_error": float(norm_error.mean()),
+        "max_token_l2_relative_error": float(relative_norm_error.max()),
+        "mean_token_l2_relative_error": float(relative_norm_error.mean()),
+        "max_linear_abs_error": float(output_error.abs().max()),
+        "linear_rmse": float(output_error.square().mean().sqrt()),
+        "linear_relative_l2_error": (
+            float(torch.sqrt(error_energy / reference_energy))
+            if reference_energy > 0 else 0.0
+        ),
+    }
+
+
 def build_wan_block_transforms(
     model: nn.Module,
     transform_class: str,
@@ -177,7 +223,7 @@ def build_wan_mixed_block_transforms(
     ):
         kwargs: dict[str, Any] = {}
         if transform_class == "givens":
-            kwargs["outlier_threshold"] = outlier_threshold
+            kwargs.update(outlier_threshold=outlier_threshold, seed=seed)
         elif transform_class == "hadamard":
             kwargs.update(randomize=hadamard_randomize, seed=seed)
         per_scope.append(
