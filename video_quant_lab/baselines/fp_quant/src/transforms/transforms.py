@@ -258,6 +258,42 @@ class GivensTransform(BaseTransform):
         self._observed_maxima = None
 
     @torch.no_grad()
+    def calibration_state(self) -> dict[str, torch.Tensor | int | float]:
+        """Return a CPU snapshot sufficient to rebuild thresholded rotations offline."""
+        if self._observed_vectors is None or self._observed_maxima is None:
+            raise RuntimeError("No unfinished Givens calibration is available to export")
+        return {
+            "group_size": self.group_size,
+            "n_iter": self.n_iter,
+            "representative_vectors": self._observed_vectors.detach().cpu().clone(),
+            "group_max_abs": self._observed_maxima.detach().cpu().clone(),
+        }
+
+    @torch.no_grad()
+    def load_calibration_state(
+        self, state: dict[str, torch.Tensor | int | float]
+    ) -> None:
+        """Restore an exported calibration snapshot before finalization."""
+        group_size = int(state["group_size"])
+        if group_size != self.group_size:
+            raise ValueError(
+                f"Calibration group_size {group_size} does not match transform {self.group_size}"
+            )
+        vectors = state["representative_vectors"]
+        maxima = state["group_max_abs"]
+        if not isinstance(vectors, torch.Tensor) or not isinstance(maxima, torch.Tensor):
+            raise TypeError("Calibration vectors and maxima must be tensors")
+        if vectors.ndim != 2 or vectors.shape[1] != self.group_size:
+            raise ValueError(f"Invalid representative vector shape {tuple(vectors.shape)}")
+        if maxima.shape != (vectors.shape[0],):
+            raise ValueError(f"Invalid group maxima shape {tuple(maxima.shape)}")
+        expected_size = vectors.shape[0] * self.group_size
+        if self.size is not None and expected_size != self.size:
+            raise ValueError(f"Calibration size {expected_size} does not match transform {self.size}")
+        self._observed_vectors = vectors.detach().cpu().float().clone()
+        self._observed_maxima = maxima.detach().cpu().float().clone()
+
+    @torch.no_grad()
     def calibrate(self, x: torch.Tensor) -> None:
         """Immediately calibrate from a single activation tensor."""
         x_flat = x.reshape(-1, x.shape[-1]).float()

@@ -97,7 +97,7 @@ def render_report(summary: dict[str, Any]) -> str:
         "",
         "## 阈值扫描结果",
         "",
-        "| Threshold | Givens channel groups | Hadamard channel groups | Max abs | Max channel RMS / median | MXFP4 MSE | SQNR (dB) | Max token L2 relative error | Linear relative L2 error |",
+        "| Threshold | Global Givens channel groups | Global Hadamard channel groups | Local Max abs | Local Max channel RMS / median | Local MXFP4 MSE | Local SQNR (dB) | Local Max token L2 relative error | Local Linear relative L2 error |",
         "|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
@@ -135,9 +135,10 @@ def render_report(summary: dict[str, Any]) -> str:
         "## 指标说明",
         "",
         "- `Threshold`：Givens 路由使用的绝对值阈值。校准时，如果某个 32 通道分组观测到的最大绝对值超过该阈值，该分组采用 Givens；否则采用 Hadamard。",
-        "- `Givens channel groups`：实际采用 Givens 旋转的 32 通道分组数量。这里统计的是全模型 30 个 Transformer blocks 的 cross_q：每层有 `1536 / 32 = 48` 个通道组，因此总数为 `30 × 48 = 1440`。它不是 token 数量。",
-        "- `Hadamard channel groups`：未触发 Givens、因而采用 Hadamard 的 32 通道分组数量。它与 Givens channel groups 之和为 1440。",
-        "- `Max abs`：完成对应旋转后，所选位置（step 10、Transformer block 0、conditional 分支）的整个 cross_q 输入激活中，所有元素绝对值的最大值，即 `max(abs(X_rotated))`。该激活形状为 `[1, 32760, 1536]`，展平 batch 后可看作 32760 个 token × 1536 个通道。它衡量最极端单点的幅度，通常越低越容易控制量化动态范围，但不能单独反映异常值是否集中在固定通道。注意，它不是用于决定路由的校准原始最大值。",
+        "- 表中带 `Global` 的两列是全模型统计；带 `Local` 的其余指标只来自 step 10、Transformer block 0、conditional 分支。两类指标的统计范围不同。",
+        "- `Global Givens channel groups`：全模型 30 个 Transformer blocks 的 cross_q 中，实际采用 Givens 旋转的 32 通道分组数量。每层有 `1536 / 32 = 48` 个通道组，因此总数为 `30 × 48 = 1440`。它不是 token 数量。",
+        "- `Global Hadamard channel groups`：全模型未触发 Givens、因而采用 Hadamard 的 32 通道分组数量。它与 Global Givens channel groups 之和为 1440。",
+        "- `Local Max abs`：完成对应旋转后，所选局部位置的整个 cross_q 输入激活中，所有元素绝对值的最大值，即 `max(abs(X_rotated))`。该激活形状为 `[1, 32760, 1536]`，展平 batch 后可看作 32760 个 token × 1536 个通道。它衡量最极端单点的幅度，通常越低越容易控制量化动态范围，但不能单独反映异常值是否集中在固定通道。注意，它不是用于决定路由的校准原始最大值。",
         "- `Max channel RMS / median`：先计算每个通道跨 token 的 RMS，再用最大的通道 RMS 除以所有通道 RMS 的中位数。它衡量能量是否集中在少数固定通道；越低通常说明 persistent channel outlier 越弱。",
         "- `MXFP4 MSE`：模拟 MXFP4 量化后的均方误差，越低越好。",
         "- `SQNR (dB)`：量化信噪比，越高越好。",
@@ -147,6 +148,7 @@ def render_report(summary: dict[str, Any]) -> str:
         "## 主要结论",
         "",
         "- 阈值越高，越少的 32 通道分组触发 Givens，更多分组回退到 Hadamard。",
+        "- 阈值 12、16、24 的全模型路由数虽然不同，但 block 0 的所有局部指标和逐帧记录完全相同。这说明发生路由切换的通道组位于其他 Transformer blocks；当前报告没有观测到那些层的输出变化。",
         "- 在这个固定位置，即使阈值提高到 24，包含主要 persistent channel outlier 的分组仍然触发 Givens：最大绝对值保持为 8.75，最大通道 RMS / 中位数仍高于 31。",
         "- 随机符号快速 Hadamard 对 persistent channel 结构的抑制明显更强：最大绝对值为 5.65，最大通道 RMS / 中位数为 18.32。",
         "- 阈值 40 时没有任何分组触发 Givens（0 个 Givens、1440 个 Hadamard），其结果"

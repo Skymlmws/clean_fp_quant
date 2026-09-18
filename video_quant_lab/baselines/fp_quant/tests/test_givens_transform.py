@@ -64,6 +64,24 @@ def test_givens_accumulates_multiple_observations():
     torch.testing.assert_close(matrix @ matrix.T, torch.eye(8), atol=1e-5, rtol=1e-5)
 
 
+def test_givens_calibration_state_preserves_offline_inputs():
+    transform = GivensTransform(size=8, group_size=4, outlier_threshold=20)
+    source = torch.arange(16, dtype=torch.float32).reshape(2, 8)
+    transform.observe(source)
+
+    state = transform.calibration_state()
+
+    assert state["group_size"] == 4
+    assert state["representative_vectors"].shape == (2, 4)
+    torch.testing.assert_close(state["group_max_abs"], torch.tensor([11.0, 15.0]))
+
+    restored = GivensTransform(size=8, group_size=4, outlier_threshold=12)
+    restored.load_calibration_state(state)
+    restored.finalize_calibration()
+    assert restored.givens_blocks == 1
+    assert restored.hadamard_blocks == 1
+
+
 def test_givens_all_fallback_matches_randomized_hadamard_exactly():
     torch.manual_seed(11)
     x = torch.randn(3, 16)

@@ -22,6 +22,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--baseline-result-dir", type=Path, required=True)
     parser.add_argument("--video-dir", type=Path, required=True)
     parser.add_argument("--method", required=True)
+    parser.add_argument("--sample-set", default="stratified 32 prompts, seed 0")
+    parser.add_argument("--note", action="append", default=[])
     return parser.parse_args()
 
 
@@ -50,7 +52,7 @@ def main() -> None:
         "",
         f"Method: {args.method}  ",
         "Model: Wan2.1-T2V-1.3B  ",
-        "Sample set: stratified 32 prompts, seed 0  ",
+        f"Sample set: {args.sample_set}  ",
         "Evaluation mode: VBench standard  ",
         f"Generated videos: {video_count}",
         "",
@@ -77,7 +79,7 @@ def main() -> None:
         "",
         "## Notes",
         "",
-        "- Scores cover the matched 32-prompt stratified subset, not the complete VBench benchmark.",
+        *[f"- {note}" for note in args.note],
         "- N/A means that VBench did not return a valid aggregate for that dimension.",
         "- Detailed per-video values are stored in the sibling evaluation JSON files.",
         "",
