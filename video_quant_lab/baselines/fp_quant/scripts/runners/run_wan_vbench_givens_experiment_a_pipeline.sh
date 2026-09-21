@@ -3,7 +3,7 @@ set -euo pipefail
 
 RUNNER_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${PROJECT_ROOT:-/home/maoliming/FP-Quant}"
-OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/vbench/wan2.1-t2v-1.3b/givens-mxfp-w4a4/experiment-a-per-prompt-seed0}"
+OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/vbench/wan2.1-t2v-1.3b/givens-mxfp-w4a4/vbench-mini-43-experiment-a-per-prompt-seed0}"
 WAIT_FOR_VIDEOS="${WAIT_FOR_VIDEOS:-12}"
 POLL_SECONDS="${POLL_SECONDS:-60}"
 

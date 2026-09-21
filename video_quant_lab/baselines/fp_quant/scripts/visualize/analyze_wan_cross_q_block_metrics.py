@@ -22,6 +22,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device-id", type=int, default=0)
     parser.add_argument("--transform-seed", type=int, default=0)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--render-json", type=Path,
+        help="Re-render block_metrics.md from an existing result JSON without GPU computation",
+    )
+    parser.add_argument("--site", help="Site name fallback when re-rendering legacy result JSON")
     return parser.parse_args()
 
 
@@ -51,10 +56,21 @@ def metrics(
 def render_report(result: dict[str, Any]) -> str:
     thresholds = result["thresholds"]
     lines = [
-        "# Wan cross_q 全层离线阈值指标",
+        f"# Wan {result['site']} 全层离线阈值指标",
         "",
         "数据范围：step 10、conditional 分支、全部 30 个 Transformer blocks。",
-        "所有指标由保存的 BF16 cross_q 输入激活离线计算，没有重新运行 Wan。",
+        f"所有指标由保存的 BF16 {result['site']} 输入激活离线计算，没有重新运行 Wan。",
+        "",
+        "## 指标与表头说明",
+        "",
+        "- `Method`：旋转方案。`Givens threshold=t` 表示校准代表向量的组内 `max_abs > t` 时采用 Givens，否则采用 Hadamard；`Randomized fast Hadamard baseline` 为全部 groups 使用 Hadamard。",
+        "- `Mean Givens groups/block`：30 个 blocks 中，每层实际采用 Givens 的 32-channel transform groups 的平均数。`self_qkv` 等 1536 维点位每层共有 48 组；`ffn_out` 每层共有 280 组。",
+        "- `Max abs`：旋转后该 block 激活矩阵中所有元素绝对值的最大值；`Mean Max abs` 是其在 30 个 blocks 上的平均。越小通常越有利于共享 scale，但不能单独决定量化误差。",
+        "- `Max channel RMS / median`：先对每个 channel 跨全部 token 计算 RMS，再以其中最大 RMS 除以中位 RMS。越接近 1，表示 channel 间能量越均匀。",
+        "- `MXFP4 MSE`：旋转后激活经 MXFP4 E2M1、每 32 个 channel 共用 E8M0 scale 的 fake quantization 后，原值与重建值的元素均方误差。越低越好。",
+        "- `SQNR (dB)`：10 × log10(信号能量 / 量化误差能量)。越高越好。",
+        "- `Max token L2 relative error`：旋转前后每个 token 的 32/1536 维向量 L2 范数相对差中的最大值。这是正交旋转的数值正确性检查，不是量化质量指标；越接近 0 越好。",
+        "- `Block`：Transformer block 编号，从 0 到 29。逐层表中的数值只对应这一个 block，不是全层平均。",
         "",
         "## 全层平均指标",
         "",
@@ -105,6 +121,16 @@ def render_report(result: dict[str, Any]) -> str:
 
 def main() -> None:
     args = parse_args()
+    if args.render_json is not None:
+        result = json.loads(args.render_json.read_text())
+        if "site" not in result:
+            if args.site is None:
+                raise ValueError("Legacy result JSON has no site; pass --site when using --render-json")
+            result["site"] = args.site
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        (args.output_dir / "block_metrics.md").write_text(render_report(result))
+        print(args.output_dir / "block_metrics.md")
+        return
     thresholds = sorted({float(value) for value in args.thresholds.split(",") if value.strip()})
     manifest = json.loads((args.data_dir / "manifest.json").read_text())
     artifact = torch.load(
@@ -115,7 +141,8 @@ def main() -> None:
     group_size = int(artifact["group_size"])
     hidden_size = int(artifact["hidden_size"])
     transform_group_count = len(WAN_LINEAR_TRANSFORM_GROUPS)
-    cross_q_index = tuple(WAN_LINEAR_TRANSFORM_GROUPS).index("cross_q")
+    site = str(manifest["site"])
+    site_index = tuple(WAN_LINEAR_TRANSFORM_GROUPS).index(site)
     quantizer = Quantizer(
         bits=4, symmetric=True, format="mxfp", granularity="group",
         group_size=32, observer="minmax", scale_precision="e8m0",
@@ -127,7 +154,7 @@ def main() -> None:
             args.data_dir / activation_info["file"], map_location="cpu", weights_only=True, mmap=True
         )
         source = source_cpu.to(device)
-        seed = args.transform_seed + block_index * transform_group_count + cross_q_index
+        seed = args.transform_seed + block_index * transform_group_count + site_index
         hadamard = HadamardTransform(group_size=group_size, randomize=True, seed=seed).to(device)
         transformed_h = hadamard(source)
         block_result = {
@@ -182,6 +209,7 @@ def main() -> None:
     })
     result = {
         "data_dir": str(args.data_dir.resolve()),
+        "site": site,
         "device": str(device),
         "thresholds": thresholds,
         "aggregate": aggregate,

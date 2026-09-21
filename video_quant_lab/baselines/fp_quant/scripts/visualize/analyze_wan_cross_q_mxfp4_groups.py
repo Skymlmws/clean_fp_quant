@@ -26,6 +26,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--blocks", default="", help="Comma-separated block indices; empty means all blocks")
     parser.add_argument("--index-only", action="store_true", help="Build index.md from existing block JSON files")
+    parser.add_argument(
+        "--render-only", action="store_true",
+        help="Re-render block Markdown files and index.md from existing block JSON files",
+    )
     return parser.parse_args()
 
 
@@ -110,6 +114,57 @@ def paired_comparison(
     }
 
 
+def transform_channel_group_comparison(
+    candidate: dict[str, torch.Tensor],
+    baseline: dict[str, torch.Tensor],
+    givens_mask: torch.Tensor,
+) -> dict[str, Any]:
+    """Aggregate MXFP4 errors over all tokens for each fixed 32-channel group."""
+    channel_groups = int(givens_mask.numel())
+    candidate_mse = candidate["mse"].reshape(-1, channel_groups)
+    baseline_mse = baseline["mse"].reshape(-1, channel_groups)
+    candidate_mean = candidate_mse.mean(dim=0)
+    baseline_mean = baseline_mse.mean(dim=0)
+    tolerance = torch.maximum(candidate_mean, baseline_mean).clamp_min(1e-12) * 1e-6
+    delta = candidate_mean - baseline_mean
+    routed_indices = givens_mask.nonzero(as_tuple=False).flatten()
+    groups = []
+    for index_tensor in routed_indices:
+        index = int(index_tensor)
+        token_delta = candidate_mse[:, index] - baseline_mse[:, index]
+        token_tolerance = torch.maximum(
+            candidate_mse[:, index], baseline_mse[:, index]
+        ).clamp_min(1e-12) * 1e-6
+        groups.append({
+            "channel_group": index,
+            "channel_start": index * 32,
+            "channel_end": (index + 1) * 32 - 1,
+            "givens_mse": float(candidate_mean[index]),
+            "hadamard_mse": float(baseline_mean[index]),
+            "mse_ratio": float(candidate_mean[index] / baseline_mean[index].clamp_min(1e-12)),
+            "token_givens_win_fraction": float((token_delta < -token_tolerance).float().mean()),
+            "token_hadamard_win_fraction": float((token_delta > token_tolerance).float().mean()),
+        })
+    if not groups:
+        return {
+            "routed_groups": 0, "givens_win_groups": 0,
+            "hadamard_win_groups": 0, "tie_groups": 0,
+            "routed_mse_ratio": None, "groups": [],
+        }
+    routed_delta = delta[routed_indices]
+    routed_tolerance = tolerance[routed_indices]
+    return {
+        "routed_groups": len(groups),
+        "givens_win_groups": int((routed_delta < -routed_tolerance).sum()),
+        "hadamard_win_groups": int((routed_delta > routed_tolerance).sum()),
+        "tie_groups": int((routed_delta.abs() <= routed_tolerance).sum()),
+        "routed_mse_ratio": float(
+            candidate_mean[routed_indices].sum() / baseline_mean[routed_indices].sum().clamp_min(1e-12)
+        ),
+        "groups": groups,
+    }
+
+
 def fmt(value: float) -> str:
     return f"{value:.6g}"
 
@@ -137,10 +192,19 @@ def render_block(block: dict[str, Any], thresholds: list[float]) -> str:
         for threshold in thresholds
     })
     lines = [
-        f"# Block {block['block']:02d}：cross_q MXFP4 逐量化组分析", "",
+        f"# Block {block['block']:02d}：{block['site']} MXFP4 逐量化组分析", "",
         f"量化组数：{block['quantization_groups']:,}。每组是一个 token 的连续 32 个 channels。", "",
         "`scale` 是实际 E8M0 scale；`max_abs_over_rms` 描述组内尖峰；"
         "`mse` 和 `relative_mse` 越低越好；`underflow_fraction` 是非零值量化为零的比例。", "",
+        "## 指标与表头说明", "",
+        "- `scale`：该 token × 32-channel MXFP4 quantization group 实际使用的 E8M0 scale。",
+        "- `max_abs_over_rms`：组内最大绝对值 ÷ 组 RMS；越小表示尖峰越弱。",
+        "- `mse`：组内 MXFP4 fake quantization 后的元素均方误差；`relative_mse` 为组内误差能量 ÷ 原始信号能量。两者越低越好。",
+        "- `underflow_fraction`：原本非零、量化后变为零的元素比例；越低越好。",
+        "- `MSE ratio G/H`：Givens MSE ÷ Hadamard MSE；小于 1 表示 Givens 更好。",
+        "- `Token G win` / `Token H win`：在固定的 transform channel group 内，分别表示 token × 32-channel quantization group 中哪方 MSE 更低的比例。",
+        "- `Group` 与 `Channels`：共享同一旋转矩阵的 32-channel transform group 编号及通道范围；其 MSE 已汇总该组的全部 token。",
+        "",
         "## 指标分布", "",
     ]
     for metric in ("scale", "max_abs_over_rms", "mse", "relative_mse", "underflow_fraction"):
@@ -167,14 +231,49 @@ def render_block(block: dict[str, Any], thresholds: list[float]) -> str:
                 f"{fmt(bucket['mean_mse_ratio'])} |"
             )
         lines.append("")
+        channel_comparison = item["transform_channel_groups"]
+        ratio = channel_comparison["routed_mse_ratio"]
+        lines.extend([
+            "#### 逐 transform channel group 净收益", "",
+            f"仅统计实际路由到 Givens 的 groups：共 {channel_comparison['routed_groups']} 组，"
+            f"Givens 净胜 {channel_comparison['givens_win_groups']} 组，"
+            f"Hadamard 净胜 {channel_comparison['hadamard_win_groups']} 组，"
+            f"持平 {channel_comparison['tie_groups']} 组，"
+            f"汇总 MSE ratio G/H = {fmt(ratio) if ratio is not None else 'n/a'}。", "",
+        ])
+        if channel_comparison["groups"]:
+            lines.extend([
+                "| Group | Channels | Givens MSE | Hadamard MSE | MSE ratio G/H | Token G win | Token H win |",
+                "|---:|---:|---:|---:|---:|---:|---:|",
+            ])
+            for group in channel_comparison["groups"]:
+                lines.append(
+                    f"| {group['channel_group']} | {group['channel_start']}–{group['channel_end']} | "
+                    f"{fmt(group['givens_mse'])} | {fmt(group['hadamard_mse'])} | "
+                    f"{fmt(group['mse_ratio'])} | {group['token_givens_win_fraction']:.2%} | "
+                    f"{group['token_hadamard_win_fraction']:.2%} |"
+                )
+            lines.append("")
     return "\n".join(lines)
 
 
 def render_index(blocks: list[dict[str, Any]], thresholds: list[float]) -> str:
     lines = [
-        "# Wan cross_q MXFP4 逐量化组分析", "",
+        f"# Wan {blocks[0]['site']} MXFP4 逐量化组分析", "",
         "数据范围：step 10、conditional 分支、全部 30 个 Transformer blocks。", "",
         "每个 block 使用独立文档；分析完全基于保存的 BF16 激活，没有重新运行 Wan。", "",
+        "## 指标与表头说明", "",
+        "- `MXFP4 quantization group`：一个 token 的连续 32 个 channels；该组 32 个 FP4 值共享一个 E8M0 scale。",
+        "- `transform channel group`：所有 token 在同一段连续 32 个 channels 上组成的矩阵；该组所有 token 共用一个 Givens 或 Hadamard 旋转矩阵。",
+        "- `Mean scale`：各 MXFP4 quantization group 实际使用的 E8M0 scale 的平均值。scale 小不必然更好，需结合误差和 underflow 一并判断。",
+        "- `Mean max_abs / RMS`：每个 MXFP4 quantization group 的最大绝对值除以该组 RMS，再取平均。越小表示组内尖峰越弱、共享 scale 越容易适配。",
+        "- `Mean relative MSE`：每组误差能量 / 原始信号能量，再取平均。越低越好。",
+        "- `Mean underflow`：原本非零、fake quantization 后变为零的元素占比，再对组取平均。越低越好。",
+        "- `Givens win` / `Hadamard win` / `Tie`：针对相同的 MXFP4 quantization group，比对 Givens 混合方案与纯 Hadamard 的组 MSE；前两者分别表示哪方更低，`Tie` 表示数值差在容差内。",
+        "- `MSE ratio G/H`：Givens MSE ÷ Hadamard MSE。小于 1 表示 Givens 更好，大于 1 表示 Hadamard 更好。",
+        "- `Source bucket`：按旋转前该 quantization group 的 `max_abs / RMS` 分桶：bottom 90% 为普通组，p90–p99 为较强异常组，top 1% 为极端组。",
+        "- `Transform channel group 汇总`：只统计实际路由到 Givens 的 32-channel transform groups；`净胜`表示将该 group 的全部 token 误差汇总后，哪种旋转的总 MSE 更低。",
+        "",
         "## Block reports", "",
     ]
     for block in blocks:
@@ -250,6 +349,29 @@ def render_index(blocks: list[dict[str, Any]], thresholds: list[float]) -> str:
                 f"{bucket_givens_mse / bucket_hadamard_mse:.6f} |"
             )
         lines.append("")
+        channel_items = [
+            block["givens"][str(threshold)]["transform_channel_groups"]
+            for block in blocks
+        ]
+        routed = sum(item["routed_groups"] for item in channel_items)
+        givens_wins = sum(item["givens_win_groups"] for item in channel_items)
+        hadamard_wins = sum(item["hadamard_win_groups"] for item in channel_items)
+        ties = sum(item["tie_groups"] for item in channel_items)
+        routed_givens_mse = sum(
+            group["givens_mse"] for item in channel_items for group in item["groups"]
+        )
+        routed_hadamard_mse = sum(
+            group["hadamard_mse"] for item in channel_items for group in item["groups"]
+        )
+        lines.extend([
+            "#### Transform channel group 汇总", "",
+            f"实际 Givens groups：{routed}；Givens 净胜：{givens_wins}；"
+            f"Hadamard 净胜：{hadamard_wins}；持平：{ties}；"
+            f"routed group MSE ratio G/H："
+            f"{routed_givens_mse / routed_hadamard_mse:.6f}" if routed else
+            "实际 Givens groups：0；无 routed group 可比较。",
+            "",
+        ])
     return "\n".join(lines)
 
 
@@ -258,10 +380,13 @@ def main() -> None:
     thresholds = sorted({float(value) for value in args.thresholds.split(",") if value.strip()})
     manifest = json.loads((args.data_dir / "manifest.json").read_text())
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    if args.index_only:
+    if args.index_only or args.render_only:
         blocks = [json.loads(path.read_text()) for path in sorted(args.output_dir.glob("block_*.json"))]
         if not blocks:
             raise FileNotFoundError(f"No block JSON files found in {args.output_dir}")
+        if args.render_only:
+            for block in blocks:
+                (args.output_dir / f"block_{block['block']:02d}.md").write_text(render_block(block, thresholds))
         (args.output_dir / "index.md").write_text(render_index(blocks, thresholds))
         print(args.output_dir / "index.md")
         return
@@ -271,7 +396,8 @@ def main() -> None:
     group_size = int(artifact["group_size"])
     hidden_size = int(artifact["hidden_size"])
     transform_group_count = len(WAN_LINEAR_TRANSFORM_GROUPS)
-    cross_q_index = tuple(WAN_LINEAR_TRANSFORM_GROUPS).index("cross_q")
+    site = str(manifest["site"])
+    site_index = tuple(WAN_LINEAR_TRANSFORM_GROUPS).index(site)
     quantizer = Quantizer(
         bits=4, symmetric=True, format="mxfp", granularity="group",
         group_size=32, observer="minmax", scale_precision="e8m0",
@@ -289,11 +415,12 @@ def main() -> None:
         source = source_cpu.to(device)
         source_groups = source.float().reshape(-1, 32)
         source_score = source_groups.abs().amax(dim=-1) / source_groups.square().mean(dim=-1).sqrt().clamp_min(1e-12)
-        seed = args.transform_seed + block_index * transform_group_count + cross_q_index
+        seed = args.transform_seed + block_index * transform_group_count + site_index
         hadamard = HadamardTransform(group_size=group_size, randomize=True, seed=seed).to(device)
         hadamard_groups = group_tensors(hadamard(source), quantizer)
         block_result: dict[str, Any] = {
             "block": block_index,
+            "site": site,
             "quantization_groups": int(source_groups.shape[0]),
             "hadamard": {"distributions": summarize_groups(hadamard_groups)},
             "givens": {},
@@ -312,6 +439,9 @@ def main() -> None:
                 "hadamard_transform_groups": transform.hadamard_blocks,
                 "distributions": summarize_groups(candidate_groups),
                 "versus_hadamard": paired_comparison(candidate_groups, hadamard_groups, source_score),
+                "transform_channel_groups": transform_channel_group_comparison(
+                    candidate_groups, hadamard_groups, transform.givens_mask
+                ),
             }
             del transform, candidate_groups
         blocks.append(block_result)

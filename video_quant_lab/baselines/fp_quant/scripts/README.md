@@ -21,10 +21,11 @@ python -m scripts.generate.quantize_wan --help
 The shell launchers locate that directory automatically, so they can be called
 from the main project root.
 
-`runners/run_wan_vbench_bf16.sh` runs a deterministic 32-prompt BF16 VBench
+`runners/run_wan_vbench_bf16.sh` runs the fixed 43-prompt VBench-1.0-mini 0.05
 subset. Wan stays resident across the batch, completed MP4 files are skipped on
 resume, and no decoded reference tensors are stored. The sampling parameters
-and augmented prompts match the official VBench Wan2.1-T2V-1.3B configuration.
+and aligned augmented prompts match the official VBench Wan2.1-T2V-1.3B
+configuration.
 
 `runners/run_wan_vbench_givens_w4a4.sh` runs the matched Givens + MXFP W4A4
 batch. It calibrates one fixed, recorded prompt before quantization, keeps the
@@ -49,10 +50,10 @@ QUANT_SCOPE=attention TRANSFORM_CLASS=givens WEIGHT_BITS=4 ACTIVATION_BITS=4 \
   ./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_vbench_mxfp.sh
 ```
 
-`runners/run_wan_vbench_givens_w4a4_finalize.sh` waits for all 32 generated
+`runners/run_wan_vbench_givens_w4a4_finalize.sh` waits for all 43 generated
 videos, evaluates the same VBench dimensions in three GPU shards, and writes a
 method report containing BF16 deltas. It then refreshes the shared comparison
-at `vbench_results/wan2.1-t2v-1.3b/stratified-32-seed0/comparison.md`. Raw
+at `vbench_results/wan2.1-t2v-1.3b/vbench-mini-43-seed0/comparison.md`. Raw
 evaluation outputs are grouped under that experiment's `methods/` directory.
 
 `runners/run_wan_baseline_pipeline.sh` supervises the next Wan baseline matrix
@@ -69,6 +70,22 @@ randomized Hadamard H32 W16A4, and Givens W4A16.
 ./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_baseline_pipeline.sh status
 ./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_baseline_pipeline.sh logs
 ./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_baseline_pipeline.sh stop
+```
+
+`runners/run_wan_vbench_mini_43_pipeline.sh` is the complete VBench-mini-43
+matrix entry point. It runs BF16 first, then the full-model W4A16, W16A4, and
+W4A4 methods, the attention/FFN scope ablations, and the two mixed-transform
+ablations. Each method is evaluated before the next one starts. The supervisor
+discovers stable idle GPUs, leaves the configured shared-GPU reserve untouched,
+resumes completed MP4 and evaluation artifacts, and records state under
+`vbench_results/wan2.1-t2v-1.3b/vbench-mini-43-seed0/full-matrix/`.
+
+```shell
+./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_vbench_mini_43_pipeline.sh plan
+./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_vbench_mini_43_pipeline.sh start
+./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_vbench_mini_43_pipeline.sh status
+./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_vbench_mini_43_pipeline.sh logs
+./video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_vbench_mini_43_pipeline.sh stop
 ```
 
 `runners/run_wan_cross_q_transform_comparison.sh` runs the paired activation

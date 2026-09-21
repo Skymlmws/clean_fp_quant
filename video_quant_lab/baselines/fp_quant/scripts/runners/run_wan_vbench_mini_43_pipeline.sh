@@ -2,9 +2,9 @@
 set -euo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-/home/maoliming/FP-Quant}"
-SUPERVISOR="${PROJECT_ROOT}/video_quant_lab/baselines/fp_quant/scripts/monitor_wan_scope_ablation.py"
-PYTHON="${PIPELINE_PYTHON:-python3}"
-RUNTIME_DIR="${PROJECT_ROOT}/vbench_results/wan2.1-t2v-1.3b/vbench-mini-43-seed0/scope-ablation"
+SUPERVISOR="${PROJECT_ROOT}/video_quant_lab/baselines/fp_quant/scripts/monitor_wan_vbench_mini_43_pipeline.py"
+PYTHON="${PIPELINE_PYTHON:-/home/maoliming/project/.venv/bin/python}"
+RUNTIME_DIR="${PROJECT_ROOT}/vbench_results/wan2.1-t2v-1.3b/vbench-mini-43-seed0/full-matrix"
 PID_FILE="${RUNTIME_DIR}/supervisor.pid"
 LOG_FILE="${RUNTIME_DIR}/supervisor.log"
 LOCK_FILE="${RUNTIME_DIR}/supervisor.lock"
@@ -17,7 +17,7 @@ is_running() {
 case "${1:-status}" in
     start|resume)
         if is_running; then
-            echo "scope-ablation pipeline already running: pid $(<"${PID_FILE}")"
+            echo "pipeline already running: pid $(<"${PID_FILE}")"
             exit 0
         fi
         nohup setsid flock -n "${LOCK_FILE}" "${PYTHON}" "${SUPERVISOR}" run \
@@ -26,34 +26,37 @@ case "${1:-status}" in
         echo "${pid}" >"${PID_FILE}"
         sleep 1
         if ! kill -0 "${pid}" 2>/dev/null; then
-            echo "scope-ablation pipeline failed to start; inspect ${LOG_FILE}" >&2
+            echo "pipeline failed to start; inspect ${LOG_FILE}" >&2
             exit 1
         fi
-        echo "scope-ablation pipeline started: pid ${pid}"
+        echo "pipeline started: pid ${pid}"
         echo "log: ${LOG_FILE}"
         ;;
     status)
         if is_running; then
-            echo "supervisor: running (pid $(<"${PID_FILE}")"
+            echo "supervisor: running (pid $(<"${PID_FILE}"))"
         else
             echo "supervisor: stopped"
         fi
         "${PYTHON}" "${SUPERVISOR}" status
+        ;;
+    plan)
+        "${PYTHON}" "${SUPERVISOR}" plan
         ;;
     logs)
         tail -n "${LOG_LINES:-80}" "${LOG_FILE}"
         ;;
     stop)
         if ! is_running; then
-            echo "scope-ablation pipeline is not running"
+            echo "pipeline is not running"
             exit 0
         fi
         pid="$(<"${PID_FILE}")"
         kill -TERM -- "-${pid}"
-        echo "stop requested for scope-ablation pipeline pid ${pid}"
+        echo "stop requested for pipeline pid ${pid}"
         ;;
     *)
-        echo "usage: $0 {start|status|logs|stop|resume}" >&2
+        echo "usage: $0 {start|status|plan|logs|stop|resume}" >&2
         exit 2
         ;;
 esac

@@ -16,11 +16,11 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 RUNNER_DIR = PROJECT_ROOT / "video_quant_lab/baselines/fp_quant/scripts/runners"
-EXPERIMENT_DIR = PROJECT_ROOT / "vbench_results/wan2.1-t2v-1.3b/stratified-32-seed0"
+EXPERIMENT_DIR = PROJECT_ROOT / "vbench_results/wan2.1-t2v-1.3b/vbench-mini-43-seed0"
 OUTPUT_ROOT = PROJECT_ROOT / "outputs/vbench/wan2.1-t2v-1.3b"
 RUNTIME_DIR = EXPERIMENT_DIR / "pipeline"
 STATE_PATH = RUNTIME_DIR / "state.json"
-EXPECTED_VIDEOS = 32
+EXPECTED_VIDEOS = 43
 REQUIRED_DIMENSIONS = {
     "subject_consistency", "background_consistency", "temporal_flickering",
     "motion_smoothness", "dynamic_degree", "aesthetic_quality", "imaging_quality",
@@ -76,7 +76,7 @@ def save_state(state: dict[str, Any]) -> None:
 
 
 def video_count(method_id: str) -> int:
-    directory = OUTPUT_ROOT / method_id / "stratified-32-seed0"
+    directory = OUTPUT_ROOT / method_id / "vbench-mini-43-seed0"
     return sum(path.stat().st_size > 0 for path in directory.glob("*.mp4"))
 
 

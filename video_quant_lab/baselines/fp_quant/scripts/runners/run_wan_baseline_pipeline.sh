@@ -4,7 +4,7 @@ set -euo pipefail
 PROJECT_ROOT="${PROJECT_ROOT:-/home/maoliming/FP-Quant}"
 SUPERVISOR="${PROJECT_ROOT}/video_quant_lab/baselines/fp_quant/scripts/monitor_wan_baseline_pipeline.py"
 PYTHON="${PIPELINE_PYTHON:-python3}"
-RUNTIME_DIR="${PROJECT_ROOT}/vbench_results/wan2.1-t2v-1.3b/stratified-32-seed0/pipeline"
+RUNTIME_DIR="${PROJECT_ROOT}/vbench_results/wan2.1-t2v-1.3b/vbench-mini-43-seed0/pipeline"
 PID_FILE="${RUNTIME_DIR}/supervisor.pid"
 LOG_FILE="${RUNTIME_DIR}/supervisor.log"
 LOCK_FILE="${RUNTIME_DIR}/supervisor.lock"

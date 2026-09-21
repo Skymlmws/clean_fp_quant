@@ -16,7 +16,7 @@ from scripts.generate.generate_wan_vbench_batch import (
     OFFICIAL_NEGATIVE_PROMPT,
     load_records,
     safe_filename,
-    select_stratified,
+    select_records,
     write_json,
 )
 from src.utils.wan_utils import (
@@ -37,6 +37,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wan-repo", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--prompt-count", type=int, default=32)
+    parser.add_argument(
+        "--selection-mode", choices=("stratified", "all"), default="stratified"
+    )
+    parser.add_argument("--suite-name")
     parser.add_argument("--selection-seed", type=int, default=20260903)
     parser.add_argument("--sample-seeds", type=int, nargs="+", default=[0])
     parser.add_argument("--rank", type=int, default=0)
@@ -99,10 +103,11 @@ def main() -> None:
     if mixed and args.quant_scope != "all":
         raise ValueError("Mixed transforms require quant-scope=all")
 
-    selected = select_stratified(
+    selected = select_records(
         load_records(args.metadata, args.augmented_prompts),
         args.prompt_count,
         args.selection_seed,
+        args.selection_mode,
     )
     if not 0 <= args.calibration_prompt_index < len(selected):
         raise ValueError("calibration-prompt-index must identify a selected prompt")
@@ -162,9 +167,10 @@ def main() -> None:
         })
     plan = {
         "schema_version": 1,
-        "suite": f"vbench-stratified-{args.prompt_count}",
+        "suite": args.suite_name or f"vbench-{args.selection_mode}-{args.prompt_count}",
         "method": method,
-        "selection_seed": args.selection_seed,
+        "selection_mode": args.selection_mode,
+        "selection_seed": args.selection_seed if args.selection_mode == "stratified" else None,
         "sample_seeds": args.sample_seeds,
         "quantization": quantization,
         "official_wan_config": {

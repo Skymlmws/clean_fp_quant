@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "model": "Wan2.1-T2V-1.3B",
+  "protocol": "vbench-1.0-mini-0.05-43",
+  "prompt_count": 43,
+  "selection_mode": "all",
+  "sample_seed": 0,
+  "metadata": "video_quant_lab/prompts/vbench-1.0-mini-0.05/VBench_kmeans_info_0.05.json",
+  "methods": [
+    {
+      "id": "bf16",
+      "label": "BF16",
+      "reference": true
+    },
+    {
+      "id": "identity-mxfp4-w4a16",
+      "label": "Identity + MXFP4 W4A16"
+    },
+    {
+      "id": "hadamard-mxfp4-w4a16",
+      "label": "Randomized Hadamard H32 + MXFP4 W4A16"
+    },
+    {
+      "id": "givens-mxfp4-w4a16",
+      "label": "Givens + MXFP4 W4A16"
+    },
+    {
+      "id": "identity-mxfp4-w16a4",
+      "label": "Identity + MXFP4 W16A4"
+    },
+    {
+      "id": "hadamard-mxfp4-w16a4",
+      "label": "Randomized Hadamard H32 + MXFP4 W16A4"
+    },
+    {
+      "id": "identity-mxfp4-w4a4",
+      "label": "Identity + MXFP4 W4A4"
+    },
+    {
+      "id": "hadamard-mxfp-w4a4",
+      "label": "Randomized Hadamard H32 + MXFP4 W4A4"
+    },
+    {
+      "id": "givens-mxfp-w4a4",
+      "label": "Givens + MXFP4 W4A4"
+    },
+    {
+      "id": "givens-mxfp-w4a4-per-prompt-calibration",
+      "label": "Givens + MXFP4 W4A4, per-prompt same-seed calibration"
+    },
+    {
+      "id": "identity-mxfp4-w4a4-attention",
+      "label": "Identity + MXFP4 W4A4, Attention-only"
+    },
+    {
+      "id": "identity-mxfp4-w4a4-ffn",
+      "label": "Identity + MXFP4 W4A4, FFN-only"
+    },
+    {
+      "id": "givens-mxfp4-w4a4-attention",
+      "label": "Givens + MXFP4 W4A4, Attention-only"
+    },
+    {
+      "id": "givens-mxfp4-w4a4-ffn",
+      "label": "Givens + MXFP4 W4A4, FFN-only"
+    },
+    {
+      "id": "attn-givens-ffn-identity-mxfp4-w4a4",
+      "label": "Attention Givens + FFN Identity MXFP4 W4A4"
+    },
+    {
+      "id": "attn-identity-ffn-givens-mxfp4-w4a4",
+      "label": "Attention Identity + FFN Givens MXFP4 W4A4"
+    }
+  ]
+}

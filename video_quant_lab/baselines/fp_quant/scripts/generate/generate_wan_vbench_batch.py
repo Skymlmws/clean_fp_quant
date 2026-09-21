@@ -37,6 +37,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wan-repo", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--prompt-count", type=int, default=32)
+    parser.add_argument(
+        "--selection-mode", choices=("stratified", "all"), default="stratified"
+    )
+    parser.add_argument("--suite-name")
     parser.add_argument("--selection-seed", type=int, default=20260903)
     parser.add_argument("--sample-seeds", type=int, nargs="+", default=[0])
     parser.add_argument("--rank", type=int, default=0)
@@ -91,6 +95,18 @@ def select_stratified(
     return [records[index] for index in selected]
 
 
+def select_records(
+    records: list[dict[str, Any]], count: int, selection_seed: int, mode: str
+) -> list[dict[str, Any]]:
+    if mode == "all":
+        if count != len(records):
+            raise ValueError(
+                f"selection-mode=all requires prompt-count={len(records)}, got {count}"
+            )
+        return records
+    return select_stratified(records, count, selection_seed)
+
+
 def safe_filename(prompt: str, sample_index: int) -> str:
     name = prompt.replace("/", "_").replace("\0", "").strip()
     suffix = f"-{sample_index}.mp4"
@@ -109,10 +125,11 @@ def main() -> None:
     args = parse_args()
     if args.world_size < 1 or not 0 <= args.rank < args.world_size:
         raise ValueError("rank must be in [0, world-size)")
-    selected = select_stratified(
+    selected = select_records(
         load_records(args.metadata, args.augmented_prompts),
         args.prompt_count,
         args.selection_seed,
+        args.selection_mode,
     )
     tasks = []
     for prompt_index, record in enumerate(selected):
@@ -126,9 +143,10 @@ def main() -> None:
     assigned = [task for task in tasks if task["task_index"] % args.world_size == args.rank]
     plan = {
         "schema_version": 1,
-        "suite": f"vbench-stratified-{args.prompt_count}",
+        "suite": args.suite_name or f"vbench-{args.selection_mode}-{args.prompt_count}",
         "method": "bf16",
-        "selection_seed": args.selection_seed,
+        "selection_mode": args.selection_mode,
+        "selection_seed": args.selection_seed if args.selection_mode == "stratified" else None,
         "sample_seeds": args.sample_seeds,
         "official_wan_config": {
             "size": [832, 480], "frames": 81, "fps": 16,

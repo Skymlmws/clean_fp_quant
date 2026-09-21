@@ -26,10 +26,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 RUNNER = PROJECT_ROOT / "video_quant_lab/baselines/fp_quant/scripts/runners/run_wan_vbench_finalize.sh"
 SUMMARIZER = PROJECT_ROOT / "video_quant_lab/baselines/fp_quant/scripts/evaluate/summarize_wan_scope_ablation.py"
 OUTPUT_ROOT = PROJECT_ROOT / "outputs/vbench/wan2.1-t2v-1.3b"
-EXPERIMENT_DIR = PROJECT_ROOT / "vbench_results/wan2.1-t2v-1.3b/stratified-32-seed0"
+EXPERIMENT_DIR = PROJECT_ROOT / "vbench_results/wan2.1-t2v-1.3b/vbench-mini-43-seed0"
 RUNTIME_DIR = EXPERIMENT_DIR / "scope-ablation"
 STATE_PATH = RUNTIME_DIR / "state.json"
-EXPECTED_VIDEOS = 32
+EXPECTED_VIDEOS = 43
 TASKS = (
     ("identity-mxfp4-w4a4-attention", "Identity + MXFP4 W4A4, Attention-only"),
     ("identity-mxfp4-w4a4-ffn", "Identity + MXFP4 W4A4, FFN-only"),
@@ -39,7 +39,7 @@ TASKS = (
 
 
 def video_count(method_id: str) -> int:
-    root = OUTPUT_ROOT / method_id / "stratified-32-seed0"
+    root = OUTPUT_ROOT / method_id / "vbench-mini-43-seed0"
     return sum(path.stat().st_size > 0 for path in root.glob("*.mp4"))
 
 

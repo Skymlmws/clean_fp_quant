@@ -11,9 +11,9 @@ export PYTHONPATH="${BASELINE_ROOT}:${PROJECT_ROOT}${PYTHONPATH:+:${PYTHONPATH}}
 PYTHON="${PYTHON:-/home/maoliming/project/.venv/bin/python}"
 CHECKPOINT="${CHECKPOINT:-/home/maoliming/project/checkpoints/Wan2.1-T2V-1.3B}"
 WAN_REPO="${WAN_REPO:-/home/maoliming/project/wan2.1}"
-PROMPT_ROOT="${PROMPT_ROOT:-${PROJECT_ROOT}/video_quant_lab/prompts/vbench-official}"
-OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/vbench/wan2.1-t2v-1.3b/givens-mxfp-w4a4/experiment-a-per-prompt-seed0}"
-PROMPT_COUNT="${PROMPT_COUNT:-32}"
+PROMPT_ROOT="${PROMPT_ROOT:-${PROJECT_ROOT}/video_quant_lab/prompts/vbench-1.0-mini-0.05}"
+OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_ROOT}/outputs/vbench/wan2.1-t2v-1.3b/givens-mxfp-w4a4/vbench-mini-43-experiment-a-per-prompt-seed0}"
+PROMPT_COUNT="${PROMPT_COUNT:-43}"
 START_RANK="${START_RANK:-0}"
 GPU_IDS="${GPU_IDS:-0 1 2 3 4 5}"
 
@@ -35,11 +35,11 @@ run_worker() {
     for ((rank = START_RANK + worker_index; rank < PROMPT_COUNT; rank += ${#devices[@]})); do
         echo "Starting experiment A rank ${rank} on GPU ${device_id}"
         "${PYTHON}" -m scripts.generate.generate_wan_vbench_quant_batch \
-            --metadata "${PROMPT_ROOT}/VBench_full_info.json" \
-            --augmented-prompts "${PROMPT_ROOT}/all_dimension_aug_wanx_seed42.txt" \
+            --metadata "${PROMPT_ROOT}/VBench_kmeans_info_0.05.json" \
+            --augmented-prompts "${PROMPT_ROOT}/all_dimension_aug_wanx_seed42_0.05.txt" \
             --checkpoint "${CHECKPOINT}" --wan-repo "${WAN_REPO}" \
             --output-dir "${OUTPUT_DIR}" --prompt-count "${PROMPT_COUNT}" \
-            --selection-seed 20260903 --sample-seeds 0 \
+            --selection-mode all --suite-name vbench-1.0-mini-0.05-43 --sample-seeds 0 \
             --device-id "${device_id}" --rank "${rank}" --world-size "${PROMPT_COUNT}" \
             --transform-class givens --transform-group-size 32 --outlier-threshold 5 \
             --quant-group-size 32 --weight-observer minmax \

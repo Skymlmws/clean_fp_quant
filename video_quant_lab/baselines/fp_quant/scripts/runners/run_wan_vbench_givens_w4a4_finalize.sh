@@ -2,14 +2,15 @@
 set -euo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-/home/maoliming/FP-Quant}"
-VIDEO_DIR="${VIDEO_DIR:-${PROJECT_ROOT}/outputs/vbench/wan2.1-t2v-1.3b/givens-mxfp-w4a4/stratified-32-seed0}"
-EXPERIMENT_DIR="${EXPERIMENT_DIR:-${PROJECT_ROOT}/vbench_results/wan2.1-t2v-1.3b/stratified-32-seed0}"
+VIDEO_DIR="${VIDEO_DIR:-${PROJECT_ROOT}/outputs/vbench/wan2.1-t2v-1.3b/givens-mxfp-w4a4/vbench-mini-43-seed0}"
+EXPERIMENT_DIR="${EXPERIMENT_DIR:-${PROJECT_ROOT}/vbench_results/wan2.1-t2v-1.3b/vbench-mini-43-seed0}"
+EXPERIMENT_TEMPLATE="${EXPERIMENT_TEMPLATE:-${PROJECT_ROOT}/video_quant_lab/experiments/wan_vbench_mini_43.json}"
 RESULT_DIR="${RESULT_DIR:-${EXPERIMENT_DIR}/methods/givens-mxfp-w4a4}"
 BASELINE_RESULT_DIR="${BASELINE_RESULT_DIR:-${EXPERIMENT_DIR}/methods/bf16}"
-METADATA="${METADATA:-${PROJECT_ROOT}/video_quant_lab/prompts/vbench-official/VBench_full_info.json}"
+METADATA="${METADATA:-${PROJECT_ROOT}/video_quant_lab/prompts/vbench-1.0-mini-0.05/VBench_kmeans_info_0.05.json}"
 VBENCH_ROOT="${VBENCH_ROOT:-/home/maoliming/VBench}"
 VBENCH_PYTHON="${VBENCH_PYTHON:-/home/maoliming/.venv-vbench/bin/python}"
-EXPECTED_VIDEOS="${EXPECTED_VIDEOS:-32}"
+EXPECTED_VIDEOS="${EXPECTED_VIDEOS:-43}"
 POLL_SECONDS="${POLL_SECONDS:-60}"
 GPU_QUALITY="${GPU_QUALITY:-3}"
 GPU_SEMANTIC="${GPU_SEMANTIC:-6}"
@@ -17,6 +18,9 @@ GPU_OBJECT="${GPU_OBJECT:-7}"
 METHOD="${METHOD:-Givens + MXFP W4A4, threshold 5}"
 
 mkdir -p "${RESULT_DIR}/logs"
+if [[ ! -f "${EXPERIMENT_DIR}/experiment.json" ]]; then
+    cp "${EXPERIMENT_TEMPLATE}" "${EXPERIMENT_DIR}/experiment.json"
+fi
 while true; do
     count="$(find "${VIDEO_DIR}" -maxdepth 1 -name '*.mp4' -type f -size +0c | wc -l)"
     printf '%s videos=%s/%s\n' "$(date --iso-8601=seconds)" "${count}" "${EXPECTED_VIDEOS}"
