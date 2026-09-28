@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..quantization.quantizer import Quantizer
+from ..quantization.msfp import MSFPParams, StaticMSFPQuantizer
 from ..transforms.transforms import BaseTransform, GivensTransform, build_transform
 
 
@@ -21,6 +22,16 @@ WAN_LINEAR_TRANSFORM_GROUPS = {
     "cross_o": ("cross_attn.o",),
     "ffn_in": ("ffn.0",),
     "ffn_out": ("ffn.2",),
+}
+
+WAN_DIFFUSERS_LINEAR_TRANSFORM_GROUPS = {
+    "self_qkv": ("attn1.to_q", "attn1.to_k", "attn1.to_v"),
+    "self_o": ("attn1.to_out.0",),
+    "cross_q": ("attn2.to_q",),
+    "cross_kv": ("attn2.to_k", "attn2.to_v"),
+    "cross_o": ("attn2.to_out.0",),
+    "ffn_in": ("ffn.net.0.proj",),
+    "ffn_out": ("ffn.net.2",),
 }
 
 WAN_QUANT_SCOPES = {
@@ -35,12 +46,15 @@ WAN_QUANT_SCOPES = {
 @dataclass
 class WanBlockTransforms:
     transforms: dict[str, BaseTransform]
+    linear_groups: dict[str, tuple[str, ...]] = field(
+        default_factory=lambda: WAN_LINEAR_TRANSFORM_GROUPS
+    )
     linears: dict[str, BaseTransform] = field(init=False)
 
     def __post_init__(self) -> None:
         self.linears = {
             linear_name: self.transforms[group_name]
-            for group_name, linear_names in WAN_LINEAR_TRANSFORM_GROUPS.items()
+            for group_name, linear_names in self.linear_groups.items()
             if group_name in self.transforms
             for linear_name in linear_names
         }
@@ -51,6 +65,7 @@ class WanQuantizationReport:
     replaced: list[str] = field(default_factory=list)
     skipped: dict[str, str] = field(default_factory=dict)
     transform_stats: dict[str, int | float] = field(default_factory=dict)
+    msfp_params: dict[str, dict[str, int | float | bool | str]] = field(default_factory=dict)
 
     @property
     def replaced_count(self) -> int:
@@ -66,8 +81,8 @@ class WanRTNLinear(nn.Linear):
         out_features: int,
         bias: bool,
         transform: BaseTransform,
-        weight_quantizer: Quantizer | None,
-        activation_quantizer: Quantizer | None,
+        weight_quantizer: Quantizer | StaticMSFPQuantizer | None,
+        activation_quantizer: Quantizer | StaticMSFPQuantizer | None,
         device: torch.device,
         dtype: torch.dtype,
     ) -> None:
@@ -84,10 +99,18 @@ class WanRTNLinear(nn.Linear):
         transform: BaseTransform,
         weight_quantizer_kwargs: dict[str, Any] | None,
         activation_quantizer_kwargs: dict[str, Any] | None,
+        weight_msfp_params: MSFPParams | None = None,
+        activation_msfp_params: MSFPParams | None = None,
     ) -> "WanRTNLinear":
-        weight_quantizer = Quantizer(**weight_quantizer_kwargs) if weight_quantizer_kwargs else None
+        weight_quantizer = (
+            StaticMSFPQuantizer(weight_msfp_params)
+            if weight_msfp_params is not None
+            else Quantizer(**weight_quantizer_kwargs) if weight_quantizer_kwargs else None
+        )
         activation_quantizer = (
-            Quantizer(**activation_quantizer_kwargs) if activation_quantizer_kwargs else None
+            StaticMSFPQuantizer(activation_msfp_params)
+            if activation_msfp_params is not None
+            else Quantizer(**activation_quantizer_kwargs) if activation_quantizer_kwargs else None
         )
         quantized = cls(
             linear.in_features,
@@ -102,8 +125,11 @@ class WanRTNLinear(nn.Linear):
 
         weight = transform(linear.weight, inv_t=True)
         if weight_quantizer is not None:
-            scales, zeros = weight_quantizer.get_quantization_params(weight)
-            weight = weight_quantizer(weight, scales, zeros)
+            if isinstance(weight_quantizer, StaticMSFPQuantizer):
+                weight = weight_quantizer(weight)
+            else:
+                scales, zeros = weight_quantizer.get_quantization_params(weight)
+                weight = weight_quantizer(weight, scales, zeros)
         quantized.weight.copy_(weight)
         if linear.bias is not None:
             quantized.bias.copy_(linear.bias)
@@ -114,8 +140,11 @@ class WanRTNLinear(nn.Linear):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.input_transform(x)
         if self.activation_quantizer is not None:
-            scales, zeros = self.activation_quantizer.get_quantization_params(x)
-            x = self.activation_quantizer(x, scales, zeros)
+            if isinstance(self.activation_quantizer, StaticMSFPQuantizer):
+                x = self.activation_quantizer(x)
+            else:
+                scales, zeros = self.activation_quantizer.get_quantization_params(x)
+                x = self.activation_quantizer(x, scales, zeros)
         return F.linear(x, self.weight, self.bias)
 
 
@@ -173,25 +202,35 @@ def build_wan_block_transforms(
     quant_scope: str = "all",
     **transform_kwargs: Any,
 ) -> list[WanBlockTransforms]:
-    if not hasattr(model, "blocks") or not hasattr(model, "dim") or not hasattr(model, "ffn_dim"):
-        raise ValueError("Expected a WanModel-like module with blocks, dim, and ffn_dim")
+    if not hasattr(model, "blocks") or not model.blocks:
+        raise ValueError("Expected a WanModel-like module with non-empty blocks")
     if quant_scope not in WAN_QUANT_SCOPES:
         choices = ", ".join(WAN_QUANT_SCOPES)
         raise ValueError(f"Unknown Wan quantization scope {quant_scope!r}; expected one of: {choices}")
+
+    first_modules = dict(model.blocks[0].named_modules())
+    if "self_attn.q" in first_modules:
+        linear_groups = WAN_LINEAR_TRANSFORM_GROUPS
+    elif "attn1.to_q" in first_modules:
+        linear_groups = WAN_DIFFUSERS_LINEAR_TRANSFORM_GROUPS
+    else:
+        raise ValueError("Unsupported Wan block layout: no recognized self-attention q projection")
 
     result = []
     base_seed = transform_kwargs.pop("seed", None)
     selected_groups = set(WAN_QUANT_SCOPES[quant_scope])
     for block_idx, _ in enumerate(model.blocks):
         transforms = {}
-        for transform_idx, name in enumerate(WAN_LINEAR_TRANSFORM_GROUPS):
+        block_modules = dict(model.blocks[block_idx].named_modules())
+        for transform_idx, name in enumerate(linear_groups):
             if name not in selected_groups:
                 continue
-            size = model.ffn_dim if name == "ffn_out" else model.dim
+            first_linear = block_modules[linear_groups[name][0]]
+            size = first_linear.in_features
             current_kwargs = dict(transform_kwargs)
             if base_seed is not None:
                 current_kwargs["seed"] = (
-                    base_seed + block_idx * len(WAN_LINEAR_TRANSFORM_GROUPS) + transform_idx
+                    base_seed + block_idx * len(linear_groups) + transform_idx
                 )
             transforms[name] = build_transform(
                 transform_class,
@@ -200,7 +239,7 @@ def build_wan_block_transforms(
                 device=device,
                 **current_kwargs,
             )
-        result.append(WanBlockTransforms(transforms))
+        result.append(WanBlockTransforms(transforms, linear_groups))
     return result
 
 
@@ -237,7 +276,9 @@ def build_wan_mixed_block_transforms(
             )
         )
     return [
-        WanBlockTransforms({**attention.transforms, **ffn.transforms})
+        WanBlockTransforms(
+            {**attention.transforms, **ffn.transforms}, attention.linear_groups
+        )
         for attention, ffn in zip(*per_scope)
     ]
 
@@ -296,6 +337,7 @@ def replace_wan_linears(
     block_transforms: list[WanBlockTransforms],
     weight_quantizer_kwargs: dict[str, Any] | None,
     activation_quantizer_kwargs: dict[str, Any] | None,
+    msfp_parameters: dict[str, tuple[MSFPParams | None, MSFPParams | None]] | None = None,
 ) -> WanQuantizationReport:
     report = WanQuantizationReport()
     for block_idx, (block, transform_set) in enumerate(zip(model.blocks, block_transforms)):
@@ -318,7 +360,18 @@ def replace_wan_linears(
                     transform,
                     weight_quantizer_kwargs,
                     activation_quantizer_kwargs,
+                    *(msfp_parameters.get(qualified_name, (None, None)) if msfp_parameters else (None, None)),
                 ),
             )
             report.replaced.append(qualified_name)
+            if msfp_parameters and qualified_name in msfp_parameters:
+                for kind, params in zip(("weight", "activation"), msfp_parameters[qualified_name]):
+                    if params is not None:
+                        report.msfp_params[f"{qualified_name}.{kind}"] = {
+                            "format": params.format_name,
+                            "signed": params.signed,
+                            "maxval": params.maxval,
+                            "zero_point": params.zero_point,
+                            "mse": params.mse,
+                        }
     return report

@@ -33,11 +33,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--outlier-threshold", type=float, default=50.0)
     parser.add_argument("--weight-bits", type=int, choices=(4, 16), default=4)
     parser.add_argument("--activation-bits", type=int, choices=(4, 16), default=16)
-    parser.add_argument("--format", choices=("mxfp", "nvfp", "int"), default="mxfp")
+    parser.add_argument("--format", choices=("mxfp", "nvfp", "int", "msfp"), default="mxfp")
     parser.add_argument("--scale-precision", choices=("e8m0", "e4m3", "fp16"), default="e8m0")
     parser.add_argument("--quant-group-size", type=int, default=32)
     parser.add_argument("--weight-observer", choices=("minmax", "mse"), default="minmax")
     parser.add_argument("--activation-observer", choices=("minmax",), default="minmax")
+    parser.add_argument("--msfp-maxval-steps", type=int, default=12)
+    parser.add_argument("--msfp-zero-point-steps", type=int, default=5)
+    parser.add_argument("--msfp-maximum-search-elements", type=int, default=4096)
+    parser.add_argument("--msfp-sign-mode", choices=("mixup", "signed"), default="mixup")
     parser.add_argument("--timesteps", type=float, nargs="+", default=(50, 250, 500, 750, 950))
     parser.add_argument("--latent-frames", type=int, default=1)
     parser.add_argument("--latent-height", type=int, default=8)
@@ -128,6 +132,10 @@ def main() -> None:
         activation_observer=args.activation_observer,
         scale_precision=args.scale_precision,
         amp_dtype=dtype,
+        msfp_maxval_steps=args.msfp_maxval_steps,
+        msfp_zero_point_steps=args.msfp_zero_point_steps,
+        msfp_maximum_search_elements=args.msfp_maximum_search_elements,
+        msfp_allow_unsigned_aal=args.msfp_sign_mode == "mixup",
     )
 
     with torch.inference_mode(), torch.autocast(
@@ -151,6 +159,8 @@ def main() -> None:
         "replaced_linears": report.replaced_count,
         "skipped": report.skipped,
         "transform_stats": report.transform_stats,
+        "msfp_params": report.msfp_params,
+        "msfp_sign_mode": args.msfp_sign_mode,
         "output": output_metrics(reference, candidate),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

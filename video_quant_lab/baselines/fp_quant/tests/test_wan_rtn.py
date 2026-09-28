@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import pytest
 
-from src.quantization.wan_rtn import wan_rtn_quantization
+from src.quantization.wan_rtn import apply_wan_msfp_config, wan_rtn_quantization
+from src.quantization.msfp import StaticMSFPQuantizer
 from src.utils.wan_utils import WanRTNLinear
 
 
@@ -158,6 +159,106 @@ def test_wan_rtn_mxfp_baseline_quantizer_selection(
         (linear.activation_quantizer is not None) == expect_activation_quantizer
         for linear in linears
     )
+
+
+def test_wan_rtn_msfp_calibrates_static_weight_and_activation_quantizers():
+    torch.manual_seed(13)
+    model = ToyWanModel().eval()
+    x = torch.randn(2, 4, 8)
+    context = torch.randn(2, 4, 8)
+
+    report = wan_rtn_quantization(
+        model,
+        [((x, context), {})],
+        torch.device("cpu"),
+        transform_class="identity",
+        transform_group_size=4,
+        weight_bits=4,
+        activation_bits=4,
+        quant_format="msfp",
+        msfp_maxval_steps=4,
+        msfp_zero_point_steps=3,
+        msfp_maximum_search_elements=256,
+    )
+
+    linears = [module for module in model.modules() if isinstance(module, WanRTNLinear)]
+    assert report.replaced_count == 10
+    assert len(report.msfp_params) == 20
+    assert all(isinstance(module.weight_quantizer, StaticMSFPQuantizer) for module in linears)
+    assert all(isinstance(module.activation_quantizer, StaticMSFPQuantizer) for module in linears)
+    assert report.msfp_params["blocks.0.self_attn.q.activation"]["signed"]
+    output = model(x, context)
+    assert output.isfinite().all()
+
+
+def test_wan_rtn_msfp_activation_quantization_requires_calibration():
+    with pytest.raises(ValueError, match="MSFP activation calibration"):
+        wan_rtn_quantization(
+            ToyWanModel(),
+            [],
+            torch.device("cpu"),
+            transform_class="identity",
+            weight_bits=4,
+            activation_bits=4,
+            quant_format="msfp",
+        )
+
+
+def test_wan_rtn_msfp_signed_baseline_disables_unsigned_aal():
+    model = ToyWanModel().eval()
+    x = torch.rand(2, 4, 8) * 5
+    context = torch.rand(2, 4, 8) * 5
+    report = wan_rtn_quantization(
+        model,
+        [((x, context), {})],
+        torch.device("cpu"),
+        transform_class="identity",
+        weight_bits=4,
+        activation_bits=4,
+        quant_format="msfp",
+        msfp_allow_unsigned_aal=False,
+        msfp_maxval_steps=4,
+        msfp_maximum_search_elements=128,
+    )
+    activations = [
+        entry for name, entry in report.msfp_params.items()
+        if name.endswith(".activation")
+    ]
+    assert activations
+    assert all(entry["signed"] for entry in activations)
+
+
+def test_apply_wan_msfp_config_reuses_saved_parameters():
+    model = ToyWanModel().eval()
+    layer_names = []
+    for block_index, block in enumerate(model.blocks):
+        for name, module in block.named_modules():
+            if isinstance(module, nn.Linear):
+                layer_names.append(f"blocks.{block_index}.{name}")
+    signed = {
+        "format": "E2M1", "exponent_bits": 2, "mantissa_bits": 1,
+        "signed": True, "maxval": 2.0, "zero_point": 0.0, "mse": 0.1,
+    }
+    unsigned = {
+        "format": "E3M1", "exponent_bits": 3, "mantissa_bits": 1,
+        "signed": False, "maxval": 3.0, "zero_point": -0.2, "mse": 0.05,
+    }
+    config = {
+        "layers": {
+            name: {
+                "weight": signed,
+                "activation_signed": signed,
+                "activation_msfp": unsigned if name.endswith("ffn.2") else signed,
+            }
+            for name in layer_names
+        }
+    }
+    report = apply_wan_msfp_config(
+        model, config, torch.device("cpu"), activation_mode="msfp"
+    )
+    assert report.replaced_count == 10
+    assert not model.blocks[0].ffn[2].activation_quantizer.params.signed
+    assert model.blocks[0].self_attn.q.activation_quantizer.params.signed
 
 
 @pytest.mark.parametrize(
